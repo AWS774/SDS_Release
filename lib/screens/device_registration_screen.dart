@@ -19,7 +19,7 @@ class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
   final _deviceService = DeviceService();
   final _authService = AuthService();
 
-  bool _isLoading = false;
+
   bool _isLoadingDevices = false;
   List<Device> _devices = [];
   String? _selectedDeviceId;

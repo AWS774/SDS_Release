@@ -109,7 +109,7 @@ class StorageTimeInfo extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha:0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -123,7 +123,7 @@ class StorageTimeInfo extends StatelessWidget {
               gradient: LinearGradient(
                 colors: [
                   Colors.blue.shade50,
-                  Colors.blue.shade100.withOpacity(0.3),
+                  Colors.blue.shade100.withValues(alpha:0.3),
                 ],
               ),
               borderRadius: const BorderRadius.vertical(
@@ -135,7 +135,7 @@ class StorageTimeInfo extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
+                    color: Colors.blue.withValues(alpha:0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
@@ -206,10 +206,10 @@ class StorageTimeInfo extends StatelessWidget {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.1),
+                      color: statusColor.withValues(alpha:0.1),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: statusColor.withOpacity(0.3),
+                        color: statusColor.withValues(alpha:0.3),
                         width: 1,
                       ),
                     ),
@@ -254,7 +254,7 @@ class StorageTimeInfo extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha:0.1),
             borderRadius: BorderRadius.circular(6),
           ),
           child: Icon(

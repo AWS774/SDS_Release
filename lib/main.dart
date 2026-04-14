@@ -129,14 +129,14 @@ class _MqttHomePageState extends State<MqttHomePage> {
         connectionStatus = 'Connecting to HiveMQ Cloud...';
       });
 
-      print('Attempting to connect to: $broker:$port with MQTT v3.1.1');
-      print('Username: $username');
-      print('Client ID: $clientId');
+      debugPrint('Attempting to connect to: $broker:$port with MQTT v3.1.1');
+      debugPrint('Username: $username');
+      debugPrint('Client ID: $clientId');
 
       // Connect dengan username dan password sesuai HiveMQ Cloud example
       await client!.connect(username, password);
     } catch (e) {
-      print('client exception - $e');
+      debugPrint('client exception - $e');
       setState(() {
         connectionStatus = 'Connection error: $e';
       });
@@ -149,11 +149,11 @@ class _MqttHomePageState extends State<MqttHomePage> {
       setState(() {
         connectionStatus = 'Connected to HiveMQ Cloud';
       });
-      print('client connected');
+      debugPrint('client connected');
 
       // Subscribe ke topic
       client!.subscribe(topic, MqttQos.atMostOnce);
-      print('Subscribing to the $topic topic');
+      debugPrint('Subscribing to the $topic topic');
 
       // Listen untuk pesan yang masuk
       client!.updates!.listen((List<MqttReceivedMessage<MqttMessage?>>? c) {
@@ -162,8 +162,8 @@ class _MqttHomePageState extends State<MqttHomePage> {
           recMess.payload.message,
         );
 
-        print('YOU GOT A NEW MESSAGE:');
-        print(message);
+        debugPrint('YOU GOT A NEW MESSAGE:');
+        debugPrint(message);
 
         setState(() {
           receivedMessage = message;
@@ -177,7 +177,7 @@ class _MqttHomePageState extends State<MqttHomePage> {
         });
       });
     } else {
-      print(
+      debugPrint(
         'ERROR client connection failed - disconnecting, status is ${client!.connectionStatus}',
       );
       setState(() {
@@ -192,21 +192,21 @@ class _MqttHomePageState extends State<MqttHomePage> {
     setState(() {
       connectionStatus = 'Connected to HiveMQ Cloud';
     });
-    print('OnConnected client callback - Client connection was sucessful');
+    debugPrint('OnConnected client callback - Client connection was sucessful');
   }
 
   void _onDisconnected() {
     setState(() {
       connectionStatus = 'Disconnected from HiveMQ Cloud';
     });
-    print('OnDisconnected client callback - Client disconnection');
+    debugPrint('OnDisconnected client callback - Client disconnection');
   }
 
   void _onSubscribed(String topic) {
     setState(() {
       connectionStatus = 'Connected & Subscribed to: $topic';
     });
-    print('Subscription confirmed for topic $topic');
+    debugPrint('Subscription confirmed for topic $topic');
   }
 
   @override

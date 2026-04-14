@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
+import 'package:flutter/foundation.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -19,9 +20,9 @@ class DatabaseService {
       );
       _supabase = Supabase.instance.client;
       _isInitialized = true;
-      print('DatabaseService: Initialized successfully');
+      debugPrint('DatabaseService: Initialized successfully');
     } catch (e) {
-      print('DatabaseService: Initialization failed: $e');
+      debugPrint('DatabaseService: Initialization failed: $e');
       rethrow;
     }
   }
@@ -52,10 +53,10 @@ class DatabaseService {
           .from('sensor_data')
           .insert(data);
 
-      print('DatabaseService: Sensor data saved successfully');
+      debugPrint('DatabaseService: Sensor data saved successfully');
       return true;
     } catch (e) {
-      print('DatabaseService: Failed to save sensor data: $e');
+      debugPrint('DatabaseService: Failed to save sensor data: $e');
       return false;
     }
   }
@@ -82,10 +83,10 @@ class DatabaseService {
           .from('device_settings')
           .upsert(data, onConflict: 'device_id,user_id');
 
-      print('DatabaseService: Device settings saved successfully');
+      debugPrint('DatabaseService: Device settings saved successfully');
       return true;
     } catch (e) {
-      print('DatabaseService: Failed to save device settings: $e');
+      debugPrint('DatabaseService: Failed to save device settings: $e');
       return false;
     }
   }
@@ -111,7 +112,7 @@ class DatabaseService {
       }
       return null;
     } catch (e) {
-      print('DatabaseService: Failed to get device settings: $e');
+      debugPrint('DatabaseService: Failed to get device settings: $e');
       return null;
     }
   }
@@ -143,7 +144,7 @@ class DatabaseService {
       final response = await query;
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      print('DatabaseService: Failed to get sensor data: $e');
+      debugPrint('DatabaseService: Failed to get sensor data: $e');
       return [];
     }
   }
@@ -166,7 +167,7 @@ class DatabaseService {
       }
       return null;
     } catch (e) {
-      print('DatabaseService: Failed to get latest sensor data: $e');
+      debugPrint('DatabaseService: Failed to get latest sensor data: $e');
       return null;
     }
   }
@@ -205,11 +206,11 @@ class DatabaseService {
             .upsert(data, onConflict: 'device_id,user_id')
             .select();
 
-        print('DatabaseService: Upsert response length: ${response.length}');
-        print('DatabaseService: Storage time settings saved successfully (upsert)');
+        debugPrint('DatabaseService: Upsert response length: ${response.length}');
+        debugPrint('DatabaseService: Storage time settings saved successfully (upsert)');
         return true;
       } catch (upsertError) {
-        print('DatabaseService: Upsert failed, attempting fallback: $upsertError');
+        debugPrint('DatabaseService: Upsert failed, attempting fallback: $upsertError');
         // Fallback: cek apakah record ada, lalu update atau insert manual
         try {
           final existing = await _supabase
@@ -225,21 +226,21 @@ class DatabaseService {
                 .from('storage_time_settings')
                 .update(data)
                 .eq('id', recordId);
-            print('DatabaseService: Fallback update succeeded for id=$recordId');
+            debugPrint('DatabaseService: Fallback update succeeded for id=$recordId');
           } else {
             await _supabase
                 .from('storage_time_settings')
                 .insert(data);
-            print('DatabaseService: Fallback insert succeeded');
+            debugPrint('DatabaseService: Fallback insert succeeded');
           }
           return true;
         } catch (fallbackError) {
-          print('DatabaseService: Fallback save failed: $fallbackError');
+          debugPrint('DatabaseService: Fallback save failed: $fallbackError');
           return false;
         }
       }
     } catch (e) {
-      print('DatabaseService: Unexpected error saving storage time settings: $e');
+      debugPrint('DatabaseService: Unexpected error saving storage time settings: $e');
       return false;
     }
   }
@@ -266,7 +267,7 @@ class DatabaseService {
       }
       return null;
     } catch (e) {
-      print('DatabaseService: Failed to get storage time settings: $e');
+      debugPrint('DatabaseService: Failed to get storage time settings: $e');
       return null;
     }
   }

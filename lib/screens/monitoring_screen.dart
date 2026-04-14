@@ -9,6 +9,7 @@ import '../services/notification_service.dart';
 import '../services/database_service.dart';
 import '../widgets/storage_time_info.dart';
 import '../models/device.dart';
+import 'package:flutter/foundation.dart';
 
 // Enum for popup types
 enum PopupType { temperature, time }
@@ -147,7 +148,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
 
     switch (state) {
       case AppLifecycleState.resumed:
-        print('App resumed - checking MQTT connection');
+        debugPrint('App resumed - checking MQTT connection');
         _mqttService.onAppResumed();
         // Update UI state after a short delay to allow reconnection
         Future.delayed(const Duration(seconds: 2), () {
@@ -157,17 +158,17 @@ class _MonitoringScreenState extends State<MonitoringScreen>
         });
         break;
       case AppLifecycleState.paused:
-        print('App paused');
+        debugPrint('App paused');
         _mqttService.onAppPaused();
         break;
       case AppLifecycleState.inactive:
-        print('App inactive');
+        debugPrint('App inactive');
         break;
       case AppLifecycleState.detached:
-        print('App detached');
+        debugPrint('App detached');
         break;
       case AppLifecycleState.hidden:
-        print('App hidden');
+        debugPrint('App hidden');
         break;
     }
   }
@@ -186,16 +187,16 @@ class _MonitoringScreenState extends State<MonitoringScreen>
   Future<void> _initializeServices() async {
     try {
       await _notificationService.initialize();
-      print('✅ NotificationService initialized in MonitoringScreen');
+      debugPrint('✅ NotificationService initialized in MonitoringScreen');
     } catch (e) {
-      print('❌ Error initializing NotificationService: $e');
+      debugPrint('❌ Error initializing NotificationService: $e');
     }
 
     try {
       await _databaseService.initialize();
-      print('✅ DatabaseService initialized in MonitoringScreen');
+      debugPrint('✅ DatabaseService initialized in MonitoringScreen');
     } catch (e) {
-      print('❌ Error initializing DatabaseService: $e');
+      debugPrint('❌ Error initializing DatabaseService: $e');
     }
   }
 
@@ -224,17 +225,17 @@ class _MonitoringScreenState extends State<MonitoringScreen>
           }
         });
 
-        print(
+        debugPrint(
           '✅ Latest sensor data loaded: Temp=${_currentTemperature}°C, Location=${_currentLocation.latitude},${_currentLocation.longitude}',
         );
       } else {
-        print('ℹ️ No previous sensor data found in database');
+        debugPrint('ℹ️ No previous sensor data found in database');
       }
 
       // Load device settings separately
       await _loadDeviceSettings();
     } catch (e) {
-      print('❌ Error loading latest sensor data: $e');
+      debugPrint('❌ Error loading latest sensor data: $e');
     }
   }
 
@@ -242,7 +243,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
     try {
       final user = _authService.currentUser;
       if (user == null) {
-        print('❌ Cannot load device settings: User not authenticated');
+        debugPrint('❌ Cannot load device settings: User not authenticated');
         // Set default value and update controller if user not authenticated
         setState(() {
           _maxTemperature = 30.0;
@@ -268,9 +269,9 @@ class _MonitoringScreenState extends State<MonitoringScreen>
           }
         });
 
-        print('✅ Device settings loaded: MaxTemp=${_maxTemperature}°C');
+        debugPrint('✅ Device settings loaded: MaxTemp=${_maxTemperature}°C');
       } else {
-        print('ℹ️ No device settings found, using default values');
+        debugPrint('ℹ️ No device settings found, using default values');
         // Set default value and update controller if no settings found
         setState(() {
           _maxTemperature = 30.0;
@@ -278,7 +279,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
         });
       }
     } catch (e) {
-      print('❌ Error loading device settings: $e');
+      debugPrint('❌ Error loading device settings: $e');
       // Set default value and update controller on error
       setState(() {
         _maxTemperature = 30.0;
@@ -291,7 +292,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
     try {
       final user = _authService.currentUser;
       if (user == null) {
-        print('❌ Cannot save device settings: User not authenticated');
+        debugPrint('❌ Cannot save device settings: User not authenticated');
         return;
       }
 
@@ -304,11 +305,11 @@ class _MonitoringScreenState extends State<MonitoringScreen>
         maxTemperature: _maxTemperature,
       );
 
-      print(
+      debugPrint(
         '✅ Device settings saved for device $deviceId: MaxTemp=${_maxTemperature}°C',
       );
     } catch (e) {
-      print('❌ Error saving device settings: $e');
+      debugPrint('❌ Error saving device settings: $e');
     }
   }
 
@@ -358,7 +359,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
           final topic = message['topic'] as String?;
           final payload = message['payload'] as String?;
           if (topic != null && payload != null) {
-            print(
+            debugPrint(
               'MonitoringScreen: Received message from stream - Topic: $topic, Payload: $payload',
             );
             _handleMqttMessage(topic, payload);
@@ -385,7 +386,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
   void _handleMqttMessage(String topic, String payload) {
     if (!mounted) return;
 
-    print('Received MQTT message - Topic: $topic, Payload: $payload');
+    debugPrint('Received MQTT message - Topic: $topic, Payload: $payload');
 
     // Check if message is from the selected device
     final expectedDataTopic =
@@ -409,13 +410,13 @@ class _MonitoringScreenState extends State<MonitoringScreen>
 
         // Extract device ID (for logging/debugging)
         if (data.containsKey('deviceid')) {
-          print('Received data from device: ${data['deviceid']}');
+          debugPrint('Received data from device: ${data['deviceid']}');
         }
 
         // Extract temperature
         if (data.containsKey('temp')) {
           temperature = (data['temp'] as num?)?.toDouble() ?? 0.0;
-          print('Updating temperature to: $temperature°C');
+          debugPrint('Updating temperature to: $temperature°C');
           setState(() {
             _currentTemperature = temperature!;
           });
@@ -434,7 +435,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
               latitude != 0.0 &&
               longitude != 0.0) {
             final newLocation = LatLng(latitude, longitude);
-            print('Updating location to: $latitude, $longitude');
+            debugPrint('Updating location to: $latitude, $longitude');
             setState(() {
               _currentLocation = newLocation;
             });
@@ -446,7 +447,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
         if (data.containsKey('setpoint')) {
           setpoint = (data['setpoint'] as num?)?.toDouble();
           if (setpoint != null) {
-            print('Received current setpoint from ESP32: $setpoint°C');
+            debugPrint('Received current setpoint from ESP32: $setpoint°C');
             setState(() {
               _maxTemperature = setpoint!;
               _maxTempController.text = setpoint.toString();
@@ -461,7 +462,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
           longitude: longitude,
         );
       } catch (e) {
-        print('Error parsing JSON payload: $e');
+        debugPrint('Error parsing JSON payload: $e');
         // Fallback: try to handle as separate topics for backward compatibility
         _handleLegacyFormat(topic, payload);
       }
@@ -477,7 +478,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
   void _handleLegacyFormat(String topic, String payload) {
     if (topic == 'esp32/temperature') {
       final temperature = double.tryParse(payload) ?? 0.0;
-      print('Updating temperature to: $temperature°C (legacy format)');
+      debugPrint('Updating temperature to: $temperature°C (legacy format)');
       setState(() {
         _currentTemperature = temperature;
       });
@@ -495,7 +496,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
         final lng = double.tryParse(coords[1]);
         if (lat != null && lng != null) {
           final newLocation = LatLng(lat, lng);
-          print('Updating location to: $lat, $lng (legacy format)');
+          debugPrint('Updating location to: $lat, $lng (legacy format)');
           setState(() {
             _currentLocation = newLocation;
           });
@@ -513,7 +514,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
 
     try {
       _mapController.move(_currentLocation, 15.0);
-      print(
+      debugPrint(
         'Map location updated to: ${_currentLocation.latitude}, ${_currentLocation.longitude}',
       );
     } catch (e) {
@@ -522,15 +523,15 @@ class _MonitoringScreenState extends State<MonitoringScreen>
   }
 
   void _sendMaxTemperature() {
-    print('DEBUG: _sendMaxTemperature called');
-    print('DEBUG: Input text: "${_maxTempController.text}"');
+    debugPrint('DEBUG: _sendMaxTemperature called');
+    debugPrint('DEBUG: Input text: "${_maxTempController.text}"');
 
     final maxTemp = double.tryParse(_maxTempController.text);
-    print('DEBUG: Parsed temperature: $maxTemp');
+    debugPrint('DEBUG: Parsed temperature: $maxTemp');
 
     if (maxTemp != null) {
-      print('DEBUG: Attempting to publish max temperature: $maxTemp');
-      print('DEBUG: MQTT service connected: ${_mqttService.isConnected}');
+      debugPrint('DEBUG: Attempting to publish max temperature: $maxTemp');
+      debugPrint('DEBUG: MQTT service connected: ${_mqttService.isConnected}');
 
       // Gunakan device-specific topic
       final deviceTopic =
@@ -544,7 +545,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
         setState(() {
           _maxTemperature = maxTemp;
         });
-        print('DEBUG: UI state updated with max temperature: $_maxTemperature');
+        debugPrint('DEBUG: UI state updated with max temperature: $_maxTemperature');
 
         // Save max temperature to device settings table
         _saveDeviceSettings();
@@ -556,10 +557,10 @@ class _MonitoringScreenState extends State<MonitoringScreen>
             backgroundColor: Colors.green,
           ),
         );
-        print('DEBUG: Success snackbar shown');
+        debugPrint('DEBUG: Success snackbar shown');
       }
     } else {
-      print('DEBUG: Invalid temperature input: "${_maxTempController.text}"');
+      debugPrint('DEBUG: Invalid temperature input: "${_maxTempController.text}"');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -567,7 +568,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
             backgroundColor: Colors.red,
           ),
         );
-        print('DEBUG: Error snackbar shown');
+        debugPrint('DEBUG: Error snackbar shown');
       }
     }
   }
@@ -580,7 +581,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
 
       // Validasi user login
       if (user == null) {
-        print('❌ User belum login, tidak dapat memuat data waktu penyimpanan');
+        debugPrint('❌ User belum login, tidak dapat memuat data waktu penyimpanan');
         return;
       }
 
@@ -592,15 +593,15 @@ class _MonitoringScreenState extends State<MonitoringScreen>
         setState(() {
           _storageTimeData = data;
         });
-        print('✅ Storage time data loaded: $data');
+        debugPrint('✅ Storage time data loaded: $data');
       }
     } catch (e) {
-      print('❌ Error loading storage time data: $e');
+      debugPrint('❌ Error loading storage time data: $e');
     }
   }
 
   void _sendTimeConfiguration() async {
-    print('DEBUG: _sendTimeConfiguration called');
+    debugPrint('DEBUG: _sendTimeConfiguration called');
 
     // Set loading state
     if (mounted) {
@@ -616,7 +617,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
       final minutes = int.tryParse(_minutesController.text) ?? 0;
       final seconds = int.tryParse(_secondsController.text) ?? 0;
 
-      print(
+      debugPrint(
         'DEBUG: Parsed time values - Days: $days, Hours: $hours, Minutes: $minutes, Seconds: $seconds',
       );
 
@@ -650,8 +651,8 @@ class _MonitoringScreenState extends State<MonitoringScreen>
         'seconds': seconds,
       };
 
-      print('DEBUG: Time configuration payload: ${jsonEncode(payload)}');
-      print('DEBUG: MQTT service connected: ${_mqttService.isConnected}');
+      debugPrint('DEBUG: Time configuration payload: ${jsonEncode(payload)}');
+      debugPrint('DEBUG: MQTT service connected: ${_mqttService.isConnected}');
 
       // Send via MQTT - gunakan device-specific topic
       final deviceTopic =
@@ -695,9 +696,9 @@ class _MonitoringScreenState extends State<MonitoringScreen>
           };
         });
 
-        print('✅ Storage time settings saved to database');
+        debugPrint('✅ Storage time settings saved to database');
       } catch (dbError) {
-        print('❌ Error saving storage time settings: $dbError');
+        debugPrint('❌ Error saving storage time settings: $dbError');
         throw dbError; // Re-throw agar error ditangani di catch block luar
       }
 
@@ -709,7 +710,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
           _storageMinutes = minutes;
           _storageSeconds = seconds;
         });
-        print('DEBUG: UI state updated with time configuration');
+        debugPrint('DEBUG: UI state updated with time configuration');
       }
 
       // Show success message
@@ -722,10 +723,10 @@ class _MonitoringScreenState extends State<MonitoringScreen>
             backgroundColor: Colors.green,
           ),
         );
-        print('DEBUG: Success snackbar shown for time configuration');
+        debugPrint('DEBUG: Success snackbar shown for time configuration');
       }
     } catch (e) {
-      print('DEBUG: Error in time configuration: $e');
+      debugPrint('DEBUG: Error in time configuration: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -733,7 +734,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
             backgroundColor: Colors.red,
           ),
         );
-        print('DEBUG: Error snackbar shown for time configuration');
+        debugPrint('DEBUG: Error snackbar shown for time configuration');
       }
     } finally {
       // Reset loading state
@@ -844,7 +845,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                       border: Border.all(color: Colors.white, width: 2),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha:0.3),
                           blurRadius: 4,
                           offset: const Offset(0, 2),
                         ),
@@ -912,7 +913,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                   boxShadow: [
                     BoxShadow(
                       color: (_isConnected ? successGreen : dangerRed)
-                          .withOpacity(0.3),
+                          .withValues(alpha:0.3),
                       blurRadius: 4,
                       offset: const Offset(0, 2),
                     ),
@@ -951,17 +952,17 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                           gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
-                            colors: [cardWhite, cardWhite.withOpacity(0.9)],
+                            colors: [cardWhite, cardWhite.withValues(alpha:0.9)],
                           ),
                           borderRadius: BorderRadius.circular(20),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
+                              color: Colors.black.withValues(alpha:0.08),
                               blurRadius: 20,
                               offset: const Offset(0, 8),
                             ),
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.04),
+                              color: Colors.black.withValues(alpha:0.04),
                               blurRadius: 6,
                               offset: const Offset(0, 2),
                             ),
@@ -1026,7 +1027,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                                                     _maxTemperature
                                                                 ? dangerRed
                                                                 : primaryBlue)
-                                                            .withOpacity(0.3),
+                                                            .withValues(alpha:0.3),
                                                         blurRadius: 8,
                                                         offset: const Offset(
                                                           0,
@@ -1053,22 +1054,22 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                             _currentTemperature >
                                                     _maxTemperature
                                                 ? [
-                                                  dangerRed.withOpacity(0.1),
-                                                  dangerRed.withOpacity(0.05),
+                                                  dangerRed.withValues(alpha:0.1),
+                                                  dangerRed.withValues(alpha:0.05),
                                                 ]
                                                 : _currentTemperature >
                                                     (_maxTemperature * 0.8)
                                                 ? [
-                                                  warningOrange.withOpacity(
+                                                  warningOrange.withValues(alpha:
                                                     0.1,
                                                   ),
-                                                  warningOrange.withOpacity(
+                                                  warningOrange.withValues(alpha:
                                                     0.05,
                                                   ),
                                                 ]
                                                 : [
-                                                  primaryBlue.withOpacity(0.1),
-                                                  primaryBlue.withOpacity(0.05),
+                                                  primaryBlue.withValues(alpha:0.1),
+                                                  primaryBlue.withValues(alpha:0.05),
                                                 ],
                                       ),
                                       borderRadius: BorderRadius.circular(20),
@@ -1080,7 +1081,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                                     (_maxTemperature * 0.8)
                                                 ? warningOrange
                                                 : primaryBlue)
-                                            .withOpacity(0.2),
+                                            .withValues(alpha:0.2),
                                         width: 2,
                                       ),
                                     ),
@@ -1126,13 +1127,13 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                       begin: Alignment.topLeft,
                                       end: Alignment.bottomRight,
                                       colors: [
-                                        dangerRed.withOpacity(0.1),
-                                        dangerRed.withOpacity(0.05),
+                                        dangerRed.withValues(alpha:0.1),
+                                        dangerRed.withValues(alpha:0.05),
                                       ],
                                     ),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                      color: dangerRed.withOpacity(0.3),
+                                      color: dangerRed.withValues(alpha:0.3),
                                       width: 1,
                                     ),
                                   ),
@@ -1141,7 +1142,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                       Container(
                                         padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(
-                                          color: dangerRed.withOpacity(0.2),
+                                          color: dangerRed.withValues(alpha:0.2),
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
@@ -1184,17 +1185,17 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [cardWhite, cardWhite.withOpacity(0.9)],
+                      colors: [cardWhite, cardWhite.withValues(alpha:0.9)],
                     ),
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
+                        color: Colors.black.withValues(alpha:0.08),
                         blurRadius: 20,
                         offset: const Offset(0, 8),
                       ),
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
+                        color: Colors.black.withValues(alpha:0.04),
                         blurRadius: 6,
                         offset: const Offset(0, 2),
                       ),
@@ -1212,8 +1213,8 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   colors: [
-                                    accentTeal.withOpacity(0.1),
-                                    accentTeal.withOpacity(0.05),
+                                    accentTeal.withValues(alpha:0.1),
+                                    accentTeal.withValues(alpha:0.05),
                                   ],
                                 ),
                                 borderRadius: BorderRadius.circular(12),
@@ -1295,17 +1296,17 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [cardWhite, cardWhite.withOpacity(0.9)],
+                      colors: [cardWhite, cardWhite.withValues(alpha:0.9)],
                     ),
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
+                        color: Colors.black.withValues(alpha:0.08),
                         blurRadius: 20,
                         offset: const Offset(0, 8),
                       ),
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
+                        color: Colors.black.withValues(alpha:0.04),
                         blurRadius: 6,
                         offset: const Offset(0, 2),
                       ),
@@ -1334,8 +1335,8 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   colors: [
-                                    warningOrange.withOpacity(0.1),
-                                    warningOrange.withOpacity(0.05),
+                                    warningOrange.withValues(alpha:0.1),
+                                    warningOrange.withValues(alpha:0.05),
                                   ],
                                 ),
                                 borderRadius: BorderRadius.circular(12),
@@ -1425,7 +1426,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                           margin: const EdgeInsets.all(8),
                                           padding: const EdgeInsets.all(6),
                                           decoration: BoxDecoration(
-                                            color: primaryBlue.withOpacity(0.1),
+                                            color: primaryBlue.withValues(alpha:0.1),
                                             borderRadius: BorderRadius.circular(
                                               8,
                                             ),
@@ -1465,7 +1466,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                               ? [
                                                 BoxShadow(
                                                   color: primaryBlue
-                                                      .withOpacity(0.3),
+                                                      .withValues(alpha:0.3),
                                                   blurRadius: 8,
                                                   offset: const Offset(0, 2),
                                                 ),
@@ -1544,7 +1545,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                             margin: const EdgeInsets.all(8),
                                             padding: const EdgeInsets.all(8),
                                             decoration: BoxDecoration(
-                                              color: primaryBlue.withOpacity(
+                                              color: primaryBlue.withValues(alpha:
                                                 0.1,
                                               ),
                                               borderRadius:
@@ -1589,7 +1590,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                                 ? [
                                                   BoxShadow(
                                                     color: primaryBlue
-                                                        .withOpacity(0.3),
+                                                        .withValues(alpha:0.3),
                                                     blurRadius: 8,
                                                     offset: const Offset(0, 2),
                                                   ),
@@ -1697,17 +1698,17 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [cardWhite, cardWhite.withOpacity(0.9)],
+                      colors: [cardWhite, cardWhite.withValues(alpha:0.9)],
                     ),
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
+                        color: Colors.black.withValues(alpha:0.08),
                         blurRadius: 20,
                         offset: const Offset(0, 8),
                       ),
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
+                        color: Colors.black.withValues(alpha:0.04),
                         blurRadius: 6,
                         offset: const Offset(0, 2),
                       ),
@@ -1736,8 +1737,8 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   colors: [
-                                    accentTeal.withOpacity(0.1),
-                                    accentTeal.withOpacity(0.05),
+                                    accentTeal.withValues(alpha:0.1),
+                                    accentTeal.withValues(alpha:0.05),
                                   ],
                                 ),
                                 borderRadius: BorderRadius.circular(12),
@@ -1829,7 +1830,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                               margin: const EdgeInsets.all(8),
                                               padding: const EdgeInsets.all(6),
                                               decoration: BoxDecoration(
-                                                color: accentTeal.withOpacity(
+                                                color: accentTeal.withValues(alpha:
                                                   0.1,
                                                 ),
                                                 borderRadius:
@@ -1886,7 +1887,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                               margin: const EdgeInsets.all(8),
                                               padding: const EdgeInsets.all(6),
                                               decoration: BoxDecoration(
-                                                color: primaryBlue.withOpacity(
+                                                color: primaryBlue.withValues(alpha:
                                                   0.1,
                                                 ),
                                                 borderRadius:
@@ -1949,7 +1950,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                               padding: const EdgeInsets.all(6),
                                               decoration: BoxDecoration(
                                                 color: warningOrange
-                                                    .withOpacity(0.1),
+                                                    .withValues(alpha:0.1),
                                                 borderRadius:
                                                     BorderRadius.circular(8),
                                               ),
@@ -2004,7 +2005,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                               margin: const EdgeInsets.all(8),
                                               padding: const EdgeInsets.all(6),
                                               decoration: BoxDecoration(
-                                                color: successGreen.withOpacity(
+                                                color: successGreen.withValues(alpha:
                                                   0.1,
                                                 ),
                                                 borderRadius:
@@ -2039,7 +2040,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                     ? LinearGradient(
                                       colors: [
                                         accentTeal,
-                                        accentTeal.withOpacity(0.8),
+                                        accentTeal.withValues(alpha:0.8),
                                       ],
                                     )
                                     : LinearGradient(
@@ -2053,7 +2054,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                 (_isConnected && !_isTimeConfigLoading)
                                     ? [
                                       BoxShadow(
-                                        color: accentTeal.withOpacity(0.3),
+                                        color: accentTeal.withValues(alpha:0.3),
                                         blurRadius: 8,
                                         offset: const Offset(0, 2),
                                       ),
@@ -2194,12 +2195,12 @@ class _MonitoringScreenState extends State<MonitoringScreen>
 
   // Method to check temperature threshold and trigger alerts
   void _checkTemperatureThreshold(double currentTemp) {
-    print(
+    debugPrint(
       '🌡️ Checking temperature threshold: Current=$currentTemp°C, Max=$_maxTemperature°C',
     );
 
     if (currentTemp > _maxTemperature) {
-      print('🚨 Temperature threshold exceeded! Triggering alert...');
+      debugPrint('🚨 Temperature threshold exceeded! Triggering alert...');
 
       try {
         // Trigger notification and vibration
@@ -2211,20 +2212,20 @@ class _MonitoringScreenState extends State<MonitoringScreen>
         // Show in-app alert as well
         _showInAppAlert(currentTemp);
 
-        print('✅ Temperature alert triggered successfully');
+        debugPrint('✅ Temperature alert triggered successfully');
       } catch (e) {
-        print('❌ Error triggering temperature alert: $e');
+        debugPrint('❌ Error triggering temperature alert: $e');
         // Still show in-app alert even if notification fails
         _showInAppAlert(currentTemp);
       }
     } else {
-      print('✅ Temperature within safe limits');
+      debugPrint('✅ Temperature within safe limits');
     }
   }
 
   // Method to handle ESP32 time notification
   void _handleTimeNotification(String payload) {
-    print('🕒 Handling ESP32 time notification: $payload');
+    debugPrint('🕒 Handling ESP32 time notification: $payload');
 
     try {
       // Parse JSON payload
@@ -2232,7 +2233,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
 
       // Check if message is true
       if (data.containsKey('message') && data['message'] == true) {
-        print('🚨 ESP32 time notification triggered! Showing alert...');
+        debugPrint('🚨 ESP32 time notification triggered! Showing alert...');
 
         // Trigger notification, vibration, and popup
         _notificationService.showTimeNotificationAlert();
@@ -2240,12 +2241,12 @@ class _MonitoringScreenState extends State<MonitoringScreen>
         // Show in-app popup alert
         _showTimeNotificationPopup();
 
-        print('✅ ESP32 time notification alert triggered successfully');
+        debugPrint('✅ ESP32 time notification alert triggered successfully');
       } else {
-        print('ℹ️ ESP32 time notification message is false or invalid');
+        debugPrint('ℹ️ ESP32 time notification message is false or invalid');
       }
     } catch (e) {
-      print('❌ Error parsing ESP32 time notification payload: $e');
+      debugPrint('❌ Error parsing ESP32 time notification payload: $e');
       // Still show popup even if JSON parsing fails
       _showTimeNotificationPopup();
     }
@@ -2376,7 +2377,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                         Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: primaryColor.withOpacity(0.1),
+                            color: primaryColor.withValues(alpha:0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Icon(icon, color: primaryColor, size: 24),
@@ -2545,11 +2546,11 @@ class _MonitoringScreenState extends State<MonitoringScreen>
         longitude: longitude,
       );
 
-      print(
+      debugPrint(
         '📊 Sensor data saved to database successfully for device: $deviceId',
       );
     } catch (e) {
-      print('❌ Failed to save sensor data to database: $e');
+      debugPrint('❌ Failed to save sensor data to database: $e');
     }
   }
 }

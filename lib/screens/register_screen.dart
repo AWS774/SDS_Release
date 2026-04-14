@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
 import 'monitoring_screen.dart';
+import 'package:flutter/foundation.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -64,15 +65,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
     } on AuthException catch (error) {
       if (mounted) {
-        print('AuthException: ${error.message}');
-        print('AuthException code: ${error.statusCode}');
+        debugPrint('AuthException: ${error.message}');
+        debugPrint('AuthException code: ${error.statusCode}');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(error.message), backgroundColor: Colors.red),
         );
       }
     } catch (error) {
       if (mounted) {
-        print('General error: $error');
+        debugPrint('General error: $error');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Registrasi gagal: $error'),

@@ -1,5 +1,6 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:vibration/vibration.dart';
+import 'package:flutter/foundation.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -14,7 +15,7 @@ class NotificationService {
   Future<void> initialize() async {
     if (_isInitialized) return;
 
-    print('🔔 Initializing NotificationService...');
+    debugPrint('🔔 Initializing NotificationService...');
 
     // Android initialization settings
     const AndroidInitializationSettings initializationSettingsAndroid =
@@ -43,7 +44,7 @@ class NotificationService {
     await _requestPermissions();
 
     _isInitialized = true;
-    print('✅ NotificationService initialized successfully');
+    debugPrint('✅ NotificationService initialized successfully');
   }
 
   Future<void> _requestPermissions() async {
@@ -56,12 +57,12 @@ class NotificationService {
     if (androidImplementation != null) {
       final bool? granted =
           await androidImplementation.requestNotificationsPermission();
-      print('📱 Notification permission granted: $granted');
+      debugPrint('📱 Notification permission granted: $granted');
     }
   }
 
   void _onNotificationTap(NotificationResponse notificationResponse) {
-    print('🔔 Notification tapped: ${notificationResponse.payload}');
+    debugPrint('🔔 Notification tapped: ${notificationResponse.payload}');
   }
 
   Future<void> showTemperatureAlert({
@@ -72,7 +73,7 @@ class NotificationService {
       await initialize();
     }
 
-    print(
+    debugPrint(
       '🚨 Showing temperature alert: Current=$currentTemperature°C, Max=$maxTemperature°C',
     );
 
@@ -88,9 +89,9 @@ class NotificationService {
         payload: 'temperature_alert',
       );
 
-      print('✅ Temperature alert notification sent successfully');
+      debugPrint('✅ Temperature alert notification sent successfully');
     } catch (e) {
-      print('❌ Error sending temperature alert: $e');
+      debugPrint('❌ Error sending temperature alert: $e');
       // Rethrow to allow caller to handle the error
       rethrow;
     }
@@ -100,7 +101,7 @@ class NotificationService {
     try {
       // Check if vibration is available
       bool? hasVibrator = await Vibration.hasVibrator();
-      print('📳 Device has vibrator: $hasVibrator');
+      debugPrint('📳 Device has vibrator: $hasVibrator');
 
       if (hasVibrator == true) {
         // Create alarm-like vibration pattern
@@ -108,12 +109,12 @@ class NotificationService {
         List<int> pattern = [0, 500, 200, 500, 200, 500, 200, 500];
 
         await Vibration.vibrate(pattern: pattern);
-        print('📳 Vibration triggered with alarm pattern');
+        debugPrint('📳 Vibration triggered with alarm pattern');
       } else {
-        print('⚠️ Device does not support vibration');
+        debugPrint('⚠️ Device does not support vibration');
       }
     } catch (e) {
-      print('❌ Error triggering vibration: $e');
+      debugPrint('❌ Error triggering vibration: $e');
     }
   }
 
@@ -165,20 +166,20 @@ class NotificationService {
         payload: payload,
       );
 
-      print('✅ Notification shown successfully');
+      debugPrint('✅ Notification shown successfully');
     } catch (e) {
-      print('❌ Error showing notification: $e');
+      debugPrint('❌ Error showing notification: $e');
     }
   }
 
   Future<void> cancelAllNotifications() async {
     await _flutterLocalNotificationsPlugin.cancelAll();
-    print('🔕 All notifications cancelled');
+    debugPrint('🔕 All notifications cancelled');
   }
 
   Future<void> cancelNotification(int id) async {
     await _flutterLocalNotificationsPlugin.cancel(id);
-    print('🔕 Notification $id cancelled');
+    debugPrint('🔕 Notification $id cancelled');
   }
 
   Future<void> showTimeNotificationAlert() async {
@@ -186,7 +187,7 @@ class NotificationService {
       await initialize();
     }
 
-    print('🕒 Showing ESP32 time notification alert');
+    debugPrint('🕒 Showing ESP32 time notification alert');
 
     try {
       // Trigger vibration with 500ms duration as specified
@@ -199,9 +200,9 @@ class NotificationService {
         payload: 'time_notification',
       );
 
-      print('✅ ESP32 time notification sent successfully');
+      debugPrint('✅ ESP32 time notification sent successfully');
     } catch (e) {
-      print('❌ Error sending ESP32 time notification: $e');
+      debugPrint('❌ Error sending ESP32 time notification: $e');
       // Rethrow to allow caller to handle the error
       rethrow;
     }
@@ -211,17 +212,17 @@ class NotificationService {
     try {
       // Check if vibration is available
       bool? hasVibrator = await Vibration.hasVibrator();
-      print('📳 Device has vibrator: $hasVibrator');
+      debugPrint('📳 Device has vibrator: $hasVibrator');
 
       if (hasVibrator == true) {
         // Single vibration with 500ms duration as specified
         await Vibration.vibrate(duration: 500);
-        print('📳 Time notification vibration triggered (500ms)');
+        debugPrint('📳 Time notification vibration triggered (500ms)');
       } else {
-        print('⚠️ Device does not support vibration');
+        debugPrint('⚠️ Device does not support vibration');
       }
     } catch (e) {
-      print('❌ Error triggering time notification vibration: $e');
+      debugPrint('❌ Error triggering time notification vibration: $e');
     }
   }
 }

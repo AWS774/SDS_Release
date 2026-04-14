@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
+import 'package:flutter/foundation.dart';
 
 class MqttService {
   MqttServerClient? _client;
@@ -68,14 +69,14 @@ class MqttService {
       connectionStatus = 'Connecting to HiveMQ Cloud...';
       _isReconnecting = false;
 
-      print('Attempting to connect to: $_broker:$_port with MQTT v3.1.1');
-      print('Username: $_username');
-      print('Client ID: $clientId');
+      debugPrint('Attempting to connect to: $_broker:$_port with MQTT v3.1.1');
+      debugPrint('Username: $_username');
+      debugPrint('Client ID: $clientId');
 
       // Connect dengan username dan password sesuai HiveMQ Cloud example
       await _client!.connect(_username, _password);
     } catch (e) {
-      print('client exception - $e');
+      debugPrint('client exception - $e');
       connectionStatus = 'Connection error: $e';
       _client!.disconnect();
       
@@ -91,7 +92,7 @@ class MqttService {
       connectionStatus = 'Connected to HiveMQ Cloud';
       _reconnectionAttempts = 0;
       _isReconnecting = false;
-      print('client connected');
+      debugPrint('client connected');
       
       // Resubscribe to all previously subscribed topics
       _resubscribeToTopics();
@@ -99,7 +100,7 @@ class MqttService {
       // Start heartbeat monitoring
       _startHeartbeat();
     } else {
-      print(
+      debugPrint(
         'ERROR client connection failed - disconnecting, status is ${_client!.connectionStatus}',
       );
       connectionStatus =
@@ -114,7 +115,7 @@ class MqttService {
   }
 
   void subscribe(String topic, Function(String, String) onMessage) {
-    print('MQTT: Attempting to subscribe to topic: $topic');
+    debugPrint('MQTT: Attempting to subscribe to topic: $topic');
     
     // Store topic and callback for reconnection
     if (!_subscribedTopics.contains(topic)) {
@@ -123,21 +124,21 @@ class MqttService {
     _topicCallbacks[topic] = onMessage;
     
     if (_client == null) {
-      print('MQTT: Client is null, cannot subscribe');
+      debugPrint('MQTT: Client is null, cannot subscribe');
       return;
     }
 
     if (!_client!.connectionStatus!.state.toString().contains('connected')) {
-      print('MQTT: Client not connected, current state: ${_client!.connectionStatus!.state}');
+      debugPrint('MQTT: Client not connected, current state: ${_client!.connectionStatus!.state}');
       return;
     }
 
     try {
       _client!.subscribe(topic, MqttQos.atMostOnce);
-      print('MQTT: Successfully subscribed to topic: $topic');
+      debugPrint('MQTT: Successfully subscribed to topic: $topic');
 
       _client!.updates!.listen((List<MqttReceivedMessage<MqttMessage?>>? c) {
-        print('MQTT: Received message update, count: ${c?.length ?? 0}');
+        debugPrint('MQTT: Received message update, count: ${c?.length ?? 0}');
         
         if (c != null && c.isNotEmpty) {
           for (var message in c) {
@@ -145,38 +146,38 @@ class MqttService {
             final String payload = MqttPublishPayload.bytesToStringAsString(recMess.payload.message);
             final String receivedTopic = message.topic;
             
-            print('MQTT: Raw message received');
-            print('MQTT: Topic: $receivedTopic');
-            print('MQTT: Payload: $payload');
-            print('MQTT: Payload length: ${payload.length}');
-            print('MQTT: Calling onMessage callback...');
+            debugPrint('MQTT: Raw message received');
+            debugPrint('MQTT: Topic: $receivedTopic');
+            debugPrint('MQTT: Payload: $payload');
+            debugPrint('MQTT: Payload length: ${payload.length}');
+            debugPrint('MQTT: Calling onMessage callback...');
             
             try {
               onMessage(receivedTopic, payload);
-              print('MQTT: onMessage callback completed successfully');
+              debugPrint('MQTT: onMessage callback completed successfully');
             } catch (e) {
-              print('MQTT: Error in onMessage callback: $e');
+              debugPrint('MQTT: Error in onMessage callback: $e');
             }
           }
         } else {
-          print('MQTT: Received empty or null message list');
+          debugPrint('MQTT: Received empty or null message list');
         }
       }, onError: (error) {
-        print('MQTT: Error in message listener: $error');
+        debugPrint('MQTT: Error in message listener: $error');
       });
     } catch (e) {
-      print('MQTT: Error during subscription: $e');
+      debugPrint('MQTT: Error during subscription: $e');
     }
   }
 
   void publish(String topic, String message) {
-    print('MQTT: Attempting to publish message');
-    print('MQTT: Topic: $topic');
-    print('MQTT: Message: $message');
-    print('MQTT: Client status: ${_client?.connectionStatus?.state}');
+    debugPrint('MQTT: Attempting to publish message');
+    debugPrint('MQTT: Topic: $topic');
+    debugPrint('MQTT: Message: $message');
+    debugPrint('MQTT: Client status: ${_client?.connectionStatus?.state}');
     
     if (_client == null) {
-      print('MQTT: Cannot publish - Client is null');
+      debugPrint('MQTT: Cannot publish - Client is null');
       return;
     }
     
@@ -185,16 +186,16 @@ class MqttService {
         final MqttClientPayloadBuilder builder = MqttClientPayloadBuilder();
         builder.addString(message);
 
-        print('MQTT: Publishing message "$message" to topic "$topic"');
+        debugPrint('MQTT: Publishing message "$message" to topic "$topic"');
         _client!.publishMessage(topic, MqttQos.exactlyOnce, builder.payload!);
-        print('MQTT: Message published successfully');
+        debugPrint('MQTT: Message published successfully');
       } catch (e) {
-        print('MQTT: Error publishing message: $e');
+        debugPrint('MQTT: Error publishing message: $e');
       }
     } else {
-      print('MQTT: Cannot publish - Client not connected');
-      print('MQTT: Current connection state: ${_client?.connectionStatus?.state}');
-      print('MQTT: Connection status: ${_client?.connectionStatus}');
+      debugPrint('MQTT: Cannot publish - Client not connected');
+      debugPrint('MQTT: Current connection state: ${_client?.connectionStatus?.state}');
+      debugPrint('MQTT: Connection status: ${_client?.connectionStatus}');
     }
   }
 
@@ -230,14 +231,14 @@ class MqttService {
     _reconnectionAttempts++;
     
     if (_reconnectionAttempts > _maxReconnectionAttempts) {
-      print('MQTT: Max reconnection attempts reached. Stopping reconnection.');
+      debugPrint('MQTT: Max reconnection attempts reached. Stopping reconnection.');
       connectionStatus = 'Max reconnection attempts reached';
       _isReconnecting = false;
       return;
     }
     
     connectionStatus = 'Reconnecting... (${_reconnectionAttempts}/$_maxReconnectionAttempts)';
-    print('MQTT: Starting reconnection attempt $_reconnectionAttempts');
+    debugPrint('MQTT: Starting reconnection attempt $_reconnectionAttempts');
     
     _reconnectionTimer = Timer(_reconnectionDelay, () {
       if (_shouldReconnect) {
@@ -275,7 +276,7 @@ class MqttService {
   
   void _checkConnection() {
     if (_client == null || !isConnected) {
-      print('MQTT: Connection lost detected by heartbeat');
+      debugPrint('MQTT: Connection lost detected by heartbeat');
       if (_shouldReconnect) {
         _startReconnection();
       }
@@ -284,7 +285,7 @@ class MqttService {
   
   // Force reconnection method (can be called externally)
   Future<void> forceReconnect() async {
-    print('MQTT: Force reconnection requested');
+    debugPrint('MQTT: Force reconnection requested');
     _reconnectionAttempts = 0;
     _stopReconnectionTimer();
     
@@ -297,14 +298,14 @@ class MqttService {
   
   // App lifecycle methods
   void onAppResumed() {
-    print('MQTT: App resumed, checking connection...');
+    debugPrint('MQTT: App resumed, checking connection...');
     if (!isConnected && _shouldReconnect) {
       forceReconnect();
     }
   }
   
   void onAppPaused() {
-    print('MQTT: App paused');
+    debugPrint('MQTT: App paused');
     // Keep connection alive but stop heartbeat to save battery
     _stopHeartbeat();
   }
@@ -312,12 +313,12 @@ class MqttService {
   // Callback methods
   void _onSubscribed(String topic) {
     connectionStatus = 'Connected & Subscribed to: $topic';
-    print('Subscription confirmed for topic $topic');
+    debugPrint('Subscription confirmed for topic $topic');
   }
 
   void _onDisconnected() {
     connectionStatus = 'Disconnected from HiveMQ Cloud';
-    print('OnDisconnected client callback - Client disconnection');
+    debugPrint('OnDisconnected client callback - Client disconnection');
     
     _stopHeartbeat();
     
@@ -331,7 +332,7 @@ class MqttService {
     connectionStatus = 'Connected to HiveMQ Cloud';
     _reconnectionAttempts = 0;
     _isReconnecting = false;
-    print('OnConnected client callback - Client connection was sucessful');
+    debugPrint('OnConnected client callback - Client connection was sucessful');
     
     // Start heartbeat monitoring
     _startHeartbeat();

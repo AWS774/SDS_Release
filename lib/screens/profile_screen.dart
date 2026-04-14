@@ -403,7 +403,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   _buildInfoRow(
                                     'Tanggal Bergabung',
                                     _formatDate(_currentUser?.createdAt != null 
-                                        ? DateTime.parse(_currentUser!.createdAt!)
+                                        ? DateTime.parse(_currentUser!.createdAt)
                                         : null),
                                     Icons.calendar_today,
                                   ),

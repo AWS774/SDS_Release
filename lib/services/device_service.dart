@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/device.dart';
+import 'package:flutter/foundation.dart';
 
 class DeviceService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -8,9 +9,9 @@ class DeviceService {
   Future<void> initialize() async {
     try {
       await _supabase.auth.currentUser;
-      print('✅ DeviceService: Supabase initialized');
+      debugPrint('✅ DeviceService: Supabase initialized');
     } catch (e) {
-      print('❌ DeviceService: Supabase initialization failed: $e');
+      debugPrint('❌ DeviceService: Supabase initialization failed: $e');
       rethrow;
     }
   }
@@ -33,13 +34,13 @@ class DeviceService {
           .select()
           .single();
 
-      print('✅ Device registered successfully: ${device.name}');
+      debugPrint('✅ Device registered successfully: ${device.name}');
       return Device.fromMap(response, response['id'].toString());
     } on PostgrestException catch (error) {
-      print('❌ DeviceService: Database error registering device: ${error.message}');
+      debugPrint('❌ DeviceService: Database error registering device: ${error.message}');
       return null;
     } catch (e) {
-      print('❌ DeviceService: Error registering device: $e');
+      debugPrint('❌ DeviceService: Error registering device: $e');
       return null;
     }
   }
@@ -53,7 +54,7 @@ class DeviceService {
 
       final currentUser = _supabase.auth.currentUser;
       if (currentUser == null) {
-        print('❌ DeviceService: No user logged in');
+        debugPrint('❌ DeviceService: No user logged in');
         return [];
       }
 
@@ -67,13 +68,13 @@ class DeviceService {
         return Device.fromMap(data, data['id'].toString());
       }).toList();
 
-      print('✅ DeviceService: Retrieved ${devices.length} devices for user');
+      debugPrint('✅ DeviceService: Retrieved ${devices.length} devices for user');
       return devices;
     } on PostgrestException catch (error) {
-      print('❌ DeviceService: Database error getting devices: ${error.message}');
+      debugPrint('❌ DeviceService: Database error getting devices: ${error.message}');
       return [];
     } catch (e) {
-      print('❌ DeviceService: Error getting devices: $e');
+      debugPrint('❌ DeviceService: Error getting devices: $e');
       return [];
     }
   }
@@ -87,7 +88,7 @@ class DeviceService {
 
       final currentUser = _supabase.auth.currentUser;
       if (currentUser == null) {
-        print('❌ DeviceService: No user logged in');
+        debugPrint('❌ DeviceService: No user logged in');
         return [];
       }
 
@@ -102,13 +103,13 @@ class DeviceService {
         return Device.fromMap(data, data['id'].toString());
       }).toList();
 
-      print('✅ DeviceService: Retrieved ${devices.length} active devices for user');
+      debugPrint('✅ DeviceService: Retrieved ${devices.length} active devices for user');
       return devices;
     } on PostgrestException catch (error) {
-      print('❌ DeviceService: Database error getting active devices: ${error.message}');
+      debugPrint('❌ DeviceService: Database error getting active devices: ${error.message}');
       return [];
     } catch (e) {
-      print('❌ DeviceService: Error getting active devices: $e');
+      debugPrint('❌ DeviceService: Error getting active devices: $e');
       return [];
     }
   }
@@ -122,7 +123,7 @@ class DeviceService {
 
       final currentUser = _supabase.auth.currentUser;
       if (currentUser == null) {
-        print('❌ DeviceService: No user logged in');
+        debugPrint('❌ DeviceService: No user logged in');
         return null;
       }
 
@@ -134,17 +135,17 @@ class DeviceService {
           .maybeSingle();
 
       if (response == null) {
-        print('⚠️ DeviceService: Device not found: $deviceId');
+        debugPrint('⚠️ DeviceService: Device not found: $deviceId');
         return null;
       }
 
-      print('✅ DeviceService: Found device: $deviceId');
+      debugPrint('✅ DeviceService: Found device: $deviceId');
       return Device.fromMap(response, response['id'].toString());
     } on PostgrestException catch (error) {
-      print('❌ DeviceService: Database error getting device: ${error.message}');
+      debugPrint('❌ DeviceService: Database error getting device: ${error.message}');
       return null;
     } catch (e) {
-      print('❌ DeviceService: Error getting device: $e');
+      debugPrint('❌ DeviceService: Error getting device: $e');
       return null;
     }
   }
@@ -157,7 +158,7 @@ class DeviceService {
       }
 
       if (device.id == null) {
-        print('❌ DeviceService: Cannot update device without ID');
+        debugPrint('❌ DeviceService: Cannot update device without ID');
         return null;
       }
 
@@ -172,13 +173,13 @@ class DeviceService {
           .select()
           .single();
 
-      print('✅ Device updated successfully: ${device.name}');
+      debugPrint('✅ Device updated successfully: ${device.name}');
       return Device.fromMap(response, response['id'].toString());
     } on PostgrestException catch (error) {
-      print('❌ DeviceService: Database error updating device: ${error.message}');
+      debugPrint('❌ DeviceService: Database error updating device: ${error.message}');
       return null;
     } catch (e) {
-      print('❌ DeviceService: Error updating device: $e');
+      debugPrint('❌ DeviceService: Error updating device: $e');
       return null;
     }
   }
@@ -195,13 +196,13 @@ class DeviceService {
           .delete()
           .eq('id', deviceId);
 
-      print('✅ Device deleted successfully: $deviceId');
+      debugPrint('✅ Device deleted successfully: $deviceId');
       return true;
     } on PostgrestException catch (error) {
-      print('❌ DeviceService: Database error deleting device: ${error.message}');
+      debugPrint('❌ DeviceService: Database error deleting device: ${error.message}');
       return false;
     } catch (e) {
-      print('❌ DeviceService: Error deleting device: $e');
+      debugPrint('❌ DeviceService: Error deleting device: $e');
       return false;
     }
   }
@@ -218,13 +219,13 @@ class DeviceService {
           .update({'is_active': isActive, 'updated_at': DateTime.now().toIso8601String()})
           .eq('id', deviceId);
 
-      print('✅ Device ${isActive ? 'activated' : 'deactivated'}: $deviceId');
+      debugPrint('✅ Device ${isActive ? 'activated' : 'deactivated'}: $deviceId');
       return true;
     } on PostgrestException catch (error) {
-      print('❌ DeviceService: Database error setting device active: ${error.message}');
+      debugPrint('❌ DeviceService: Database error setting device active: ${error.message}');
       return false;
     } catch (e) {
-      print('❌ DeviceService: Error setting device active: $e');
+      debugPrint('❌ DeviceService: Error setting device active: $e');
       return false;
     }
   }
@@ -250,7 +251,7 @@ class DeviceService {
 
       return response != null;
     } catch (e) {
-      print('❌ DeviceService: Error checking device existence: $e');
+      debugPrint('❌ DeviceService: Error checking device existence: $e');
       return false;
     }
   }
@@ -274,7 +275,7 @@ class DeviceService {
 
       return response.length;
     } catch (e) {
-      print('❌ DeviceService: Error getting device count: $e');
+      debugPrint('❌ DeviceService: Error getting device count: $e');
       return 0;
     }
   }
