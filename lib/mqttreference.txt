@@ -1,0 +1,357 @@
+import 'package:flutter/material.dart';
+import 'package:mqtt_client/mqtt_client.dart';
+import 'package:mqtt_client/mqtt_server_client.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async';
+import 'dart:io';
+
+import 'config/supabase_config.dart';
+import 'services/auth_service.dart';
+import 'screens/login_screen.dart';
+import 'screens/monitoring_screen.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Supabase
+  await Supabase.initialize(
+    url: SupabaseConfig.supabaseUrl,
+    anonKey: SupabaseConfig.supabaseAnonKey,
+  );
+  
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'MQTT Cooler Box',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+      ),
+      home: const AuthWrapper(),
+    );
+  }
+}
+
+class AuthWrapper extends StatefulWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  final AuthService _authService = AuthService();
+  bool _isLoading = true;
+  bool _isLoggedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuthStatus();
+  }
+
+  Future<void> _checkAuthStatus() async {
+    final isLoggedIn = await _authService.isLoggedIn();
+    setState(() {
+      _isLoggedIn = isLoggedIn;
+      _isLoading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    return _isLoggedIn ? const MonitoringScreen() : const LoginScreen();
+  }
+}
+
+class MqttHomePage extends StatefulWidget {
+  const MqttHomePage({super.key});
+
+  @override
+  State<MqttHomePage> createState() => _MqttHomePageState();
+}
+
+class _MqttHomePageState extends State<MqttHomePage> {
+  MqttServerClient? client;
+  String connectionStatus = 'Disconnected';
+  String receivedMessage = 'No message received yet';
+  List<String> messageHistory = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _connectToMqtt();
+  }
+
+  Future<void> _connectToMqtt() async {
+    // Konfigurasi HiveMQ Cloud broker
+    const String broker = '67d560452e2d4534b5decfc22c4cb938.s1.eu.hivemq.cloud';
+    const int port = 8883;
+    // Generate unique client ID dengan timestamp untuk menghindari konflik
+    final String clientId =
+        'flutter_cooler_box_${DateTime.now().millisecondsSinceEpoch}';
+    const String username = 'MobileApps';
+    const String password = 'Mobile123!';
+    const String topic = 'cooler_box/hello';
+
+    client = MqttServerClient.withPort(broker, clientId, port);
+
+    // Konfigurasi untuk HiveMQ Cloud sesuai dengan example
+    client!.secure = true;
+    client!.securityContext =
+        SecurityContext.defaultContext; // Penting untuk TLS
+    client!.keepAlivePeriod = 20; // Sesuai dengan HiveMQ Cloud example
+    client!.onDisconnected = _onDisconnected;
+    client!.onConnected = _onConnected;
+    client!.onSubscribed = _onSubscribed;
+
+    try {
+      setState(() {
+        connectionStatus = 'Connecting to HiveMQ Cloud...';
+      });
+
+      print('Attempting to connect to: $broker:$port with MQTT v3.1.1');
+      print('Username: $username');
+      print('Client ID: $clientId');
+
+      // Connect dengan username dan password sesuai HiveMQ Cloud example
+      await client!.connect(username, password);
+    } catch (e) {
+      print('client exception - $e');
+      setState(() {
+        connectionStatus = 'Connection error: $e';
+      });
+      client!.disconnect();
+      return;
+    }
+
+    // Check connection status sesuai HiveMQ Cloud example
+    if (client!.connectionStatus!.state == MqttConnectionState.connected) {
+      setState(() {
+        connectionStatus = 'Connected to HiveMQ Cloud';
+      });
+      print('client connected');
+
+      // Subscribe ke topic
+      client!.subscribe(topic, MqttQos.atMostOnce);
+      print('Subscribing to the $topic topic');
+
+      // Listen untuk pesan yang masuk
+      client!.updates!.listen((List<MqttReceivedMessage<MqttMessage?>>? c) {
+        final MqttPublishMessage recMess = c![0].payload as MqttPublishMessage;
+        final message = MqttPublishPayload.bytesToStringAsString(
+          recMess.payload.message,
+        );
+
+        print('YOU GOT A NEW MESSAGE:');
+        print(message);
+
+        setState(() {
+          receivedMessage = message;
+          messageHistory.insert(
+            0,
+            '${DateTime.now().toString().substring(11, 19)}: $message',
+          );
+          if (messageHistory.length > 10) {
+            messageHistory.removeLast();
+          }
+        });
+      });
+    } else {
+      print(
+        'ERROR client connection failed - disconnecting, status is ${client!.connectionStatus}',
+      );
+      setState(() {
+        connectionStatus =
+            'Connection failed: ${client!.connectionStatus!.returnCode}';
+      });
+      client!.disconnect();
+    }
+  }
+
+  void _onConnected() {
+    setState(() {
+      connectionStatus = 'Connected to HiveMQ Cloud';
+    });
+    print('OnConnected client callback - Client connection was sucessful');
+  }
+
+  void _onDisconnected() {
+    setState(() {
+      connectionStatus = 'Disconnected from HiveMQ Cloud';
+    });
+    print('OnDisconnected client callback - Client disconnection');
+  }
+
+  void _onSubscribed(String topic) {
+    setState(() {
+      connectionStatus = 'Connected & Subscribed to: $topic';
+    });
+    print('Subscription confirmed for topic $topic');
+  }
+
+  @override
+  void dispose() {
+    client?.disconnect();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: const Text('MQTT Cooler Box'),
+        centerTitle: true,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Status Connection Card
+            Card(
+              elevation: 4,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Connection Status',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(
+                          connectionStatus.contains('Connected')
+                              ? Icons.wifi
+                              : Icons.wifi_off,
+                          color:
+                              connectionStatus.contains('Connected')
+                                  ? Colors.green
+                                  : Colors.red,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            connectionStatus,
+                            style: TextStyle(
+                              color:
+                                  connectionStatus.contains('Connected')
+                                      ? Colors.green
+                                      : Colors.red,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Latest Message Card
+            Card(
+              elevation: 4,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Latest Message',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey[300]!),
+                      ),
+                      child: Text(
+                        receivedMessage,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Message History
+            const Text(
+              'Message History',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+
+            Expanded(
+              child: Card(
+                elevation: 4,
+                child:
+                    messageHistory.isEmpty
+                        ? const Center(
+                          child: Text(
+                            'No messages received yet',
+                            style: TextStyle(fontSize: 16, color: Colors.grey),
+                          ),
+                        )
+                        : ListView.builder(
+                          itemCount: messageHistory.length,
+                          itemBuilder: (context, index) {
+                            return ListTile(
+                              leading: const Icon(
+                                Icons.message,
+                                color: Colors.blue,
+                              ),
+                              title: Text(messageHistory[index]),
+                              dense: true,
+                            );
+                          },
+                        ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _connectToMqtt,
+        tooltip: 'Reconnect',
+        child: const Icon(Icons.refresh),
+      ),
+    );
+  }
+}
