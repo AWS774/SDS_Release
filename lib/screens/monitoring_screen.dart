@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import 'dart:async';
+import 'dart:math' as math;
+import 'package:http/http.dart' as http;
 import '../services/mqtt_service.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
@@ -61,6 +64,18 @@ class _MonitoringScreenState extends State<MonitoringScreen>
   bool _mapLoadError = false;
   bool _isReconnecting = false;
   int _reconnectionAttempts = 0;
+
+  // Device data state — true hanya setelah data MQTT dari alat diterima
+  bool _hasReceivedDeviceData = false;
+
+  // Navigation state
+  LatLng? _destinationLocation;
+  String? _destinationName;
+  final TextEditingController _destinationController = TextEditingController();
+  List<LatLng> _routePoints = [];
+  bool _isLoadingRoute = false;
+  bool _showRoute = false;
+  String? _routeInfo;
 
   // Time configuration state
   bool _isTimeConfigLoading = false;
@@ -139,6 +154,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
     _secondsController.dispose();
     _temperatureAnimationController.dispose();
     _pulseAnimationController.dispose();
+    _destinationController.dispose();
     super.dispose();
   }
 
@@ -340,17 +356,17 @@ class _MonitoringScreenState extends State<MonitoringScreen>
         // Subscribe to combined sensor data topic with callback
         // Gunakan device ID dari parameter jika tersedia
         final deviceTopic =
-            widget.device != null
-                ? '${widget.device!.deviceId}/data'
-                : 'esp32/data';
+        widget.device != null
+            ? '${widget.device!.deviceId}/data'
+            : 'esp32/data';
 
         _mqttService.subscribe(deviceTopic, _handleMqttMessage);
 
         // Subscribe to time notification topic
         final timeTopic =
-            widget.device != null
-                ? '${widget.device!.deviceId}/time_notification'
-                : 'esp32/time_notification';
+        widget.device != null
+            ? '${widget.device!.deviceId}/time_notification'
+            : 'esp32/time_notification';
 
         _mqttService.subscribe(timeTopic, _handleMqttMessage);
 
@@ -390,18 +406,25 @@ class _MonitoringScreenState extends State<MonitoringScreen>
 
     // Check if message is from the selected device
     final expectedDataTopic =
-        widget.device != null
-            ? '${widget.device!.deviceId}/data'
-            : 'esp32/data';
+    widget.device != null
+        ? '${widget.device!.deviceId}/data'
+        : 'esp32/data';
     final expectedTimeTopic =
-        widget.device != null
-            ? '${widget.device!.deviceId}/time_notification'
-            : 'esp32/time_notification';
+    widget.device != null
+        ? '${widget.device!.deviceId}/time_notification'
+        : 'esp32/time_notification';
 
     if (topic == expectedDataTopic) {
       try {
         // Parse JSON payload
         final Map<String, dynamic> data = json.decode(payload);
+
+        // Tandai bahwa data dari alat sudah diterima
+        if (!_hasReceivedDeviceData && mounted) {
+          setState(() {
+            _hasReceivedDeviceData = true;
+          });
+        }
 
         double? temperature;
         double? latitude;
@@ -481,6 +504,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
       debugPrint('Updating temperature to: $temperature°C (legacy format)');
       setState(() {
         _currentTemperature = temperature;
+        _hasReceivedDeviceData = true;
       });
 
       // Check if temperature exceeds maximum threshold
@@ -535,9 +559,9 @@ class _MonitoringScreenState extends State<MonitoringScreen>
 
       // Gunakan device-specific topic
       final deviceTopic =
-          widget.device != null
-              ? '${widget.device!.deviceId}/setpoint'
-              : 'esp32/setpoint';
+      widget.device != null
+          ? '${widget.device!.deviceId}/setpoint'
+          : 'esp32/setpoint';
 
       _mqttService.publish(deviceTopic, jsonEncode({'atur_setpoint': maxTemp}));
 
@@ -656,9 +680,9 @@ class _MonitoringScreenState extends State<MonitoringScreen>
 
       // Send via MQTT - gunakan device-specific topic
       final deviceTopic =
-          widget.device != null
-              ? '${widget.device!.deviceId}/time'
-              : 'esp32/time';
+      widget.device != null
+          ? '${widget.device!.deviceId}/time'
+          : 'esp32/time';
 
       _mqttService.publish(deviceTopic, jsonEncode(payload));
 
@@ -746,6 +770,426 @@ class _MonitoringScreenState extends State<MonitoringScreen>
     }
   }
 
+
+  // ─────────────── NAVIGATION METHODS ───────────────
+
+  /// Tampilkan dialog input tujuan pengiriman
+  void _showDestinationDialog() {
+    _destinationController.clear();
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        bool isSearching = false;
+        List<Map<String, dynamic>> suggestions = [];
+
+        return StatefulBuilder(
+          builder: (ctx, setStateDialog) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.flag_rounded, color: Color(0xFF2563EB)),
+                  SizedBox(width: 8),
+                  Text(
+                    'Tujuan Pengiriman',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Titik awal: GPS Alat (CoolerBox)',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _destinationController,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: 'Cari alamat tujuan...',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: isSearching
+                            ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                            : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                      ),
+                      onSubmitted: (val) async {
+                        if (val.trim().isEmpty) return;
+                        setStateDialog(() => isSearching = true);
+                        final results = await _geocodeSearch(val.trim());
+                        setStateDialog(() {
+                          isSearching = false;
+                          suggestions = results;
+                        });
+                      },
+                    ),
+                    if (suggestions.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Pilih lokasi:',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: suggestions.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (ctx, i) {
+                            final s = suggestions[i];
+                            return ListTile(
+                              dense: true,
+                              leading: const Icon(Icons.location_on, size: 18, color: Color(0xFF2563EB)),
+                              title: Text(
+                                s['displayName'],
+                                style: const TextStyle(fontSize: 13),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              onTap: () {
+                                Navigator.pop(ctx);
+                                _setDestinationAndRoute(
+                                  LatLng(s['lat'], s['lng']),
+                                  s['displayName'],
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Batal'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final val = _destinationController.text.trim();
+                    if (val.isEmpty) return;
+                    setStateDialog(() => isSearching = true);
+                    final results = await _geocodeSearch(val);
+                    setStateDialog(() {
+                      isSearching = false;
+                      suggestions = results;
+                    });
+                  },
+                  icon: const Icon(Icons.search, size: 16),
+                  label: const Text('Cari'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Geocode nama tempat → koordinat via Nominatim (OpenStreetMap, gratis)
+  Future<List<Map<String, dynamic>>> _geocodeSearch(String query) async {
+    try {
+      final url = Uri.parse(
+        'https://nominatim.openstreetmap.org/search'
+            '?q=${Uri.encodeComponent(query)}'
+            '&format=json&limit=5&addressdetails=1',
+      );
+      final response = await http.get(
+        url,
+        headers: {'User-Agent': 'CoolerBoxApp/1.0'},
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as List;
+        return data.map((item) {
+          return {
+            'lat': double.parse(item['lat']),
+            'lng': double.parse(item['lon']),
+            'displayName': item['display_name'] as String,
+          };
+        }).toList();
+      }
+    } catch (e) {
+      debugPrint('Geocode error: $e');
+    }
+    return [];
+  }
+
+  /// Set tujuan dan langsung fetch rute dari alat ke tujuan
+  Future<void> _setDestinationAndRoute(LatLng destination, String name) async {
+    setState(() {
+      _destinationLocation = destination;
+      _destinationName = name;
+    });
+    // Titik awal = GPS alat (_currentLocation), bukan GPS HP
+    await _fetchRoute(_currentLocation, destination);
+  }
+
+  /// Fetch rute dari OSRM (OpenStreetMap Routing Machine) - gratis, no API key
+  /// from = GPS alat, to = tujuan pengiriman
+  Future<void> _fetchRoute(LatLng from, LatLng to) async {
+    setState(() {
+      _isLoadingRoute = true;
+      _routePoints = [];
+      _routeInfo = null;
+    });
+
+    try {
+      final url =
+          'https://router.project-osrm.org/route/v1/driving/'
+          '${from.longitude},${from.latitude};'
+          '${to.longitude},${to.latitude}'
+          '?overview=full&geometries=geojson&steps=false';
+
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['code'] == 'Ok' && data['routes'] != null && (data['routes'] as List).isNotEmpty) {
+          final route = data['routes'][0];
+          final coords = route['geometry']['coordinates'] as List;
+          final distanceM = (route['distance'] as num).toDouble();
+          final durationS = (route['duration'] as num).toDouble();
+
+          final points = coords.map((c) => LatLng(c[1].toDouble(), c[0].toDouble())).toList();
+
+          // Format distance & duration
+          final distStr = distanceM >= 1000
+              ? '${(distanceM / 1000).toStringAsFixed(1)} km'
+              : '${distanceM.round()} m';
+          final durationMin = (durationS / 60).ceil();
+          String durStr;
+          if (durationMin >= 60) {
+            final h = durationMin ~/ 60;
+            final m = durationMin % 60;
+            durStr = m > 0 ? '$h jam $m mnt' : '$h jam';
+          } else {
+            durStr = '$durationMin menit';
+          }
+
+          // Estimasi waktu tiba (sekarang + durasi)
+          final now = DateTime.now();
+          final eta = now.add(Duration(minutes: durationMin));
+          final etaStr = '${eta.hour.toString().padLeft(2, '0')}:${eta.minute.toString().padLeft(2, '0')}';
+
+          setState(() {
+            _routePoints = points;
+            _showRoute = true;
+            _routeInfo = '$distStr • $durStr • Tiba ~$etaStr';
+          });
+
+          // Fit map to show both alat and destination
+          _fitMapToBounds(from, to);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching route: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Gagal memuat rute. Periksa koneksi internet.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingRoute = false;
+        });
+      }
+    }
+  }
+
+  /// Fit peta agar menampilkan kedua titik sekaligus
+  void _fitMapToBounds(LatLng a, LatLng b) {
+    final minLat = math.min(a.latitude, b.latitude);
+    final maxLat = math.max(a.latitude, b.latitude);
+    final minLng = math.min(a.longitude, b.longitude);
+    final maxLng = math.max(a.longitude, b.longitude);
+
+    final centerLat = (minLat + maxLat) / 2;
+    final centerLng = (minLng + maxLng) / 2;
+
+    // Hitung zoom level berdasarkan jarak
+    final latDiff = maxLat - minLat;
+    final lngDiff = maxLng - minLng;
+    final maxDiff = math.max(latDiff, lngDiff);
+
+    double zoom = 13.0;
+    if (maxDiff > 0.5) zoom = 10.0;
+    else if (maxDiff > 0.2) zoom = 11.0;
+    else if (maxDiff > 0.1) zoom = 12.0;
+    else if (maxDiff > 0.05) zoom = 13.0;
+    else zoom = 14.0;
+
+    _mapController.move(LatLng(centerLat, centerLng), zoom);
+  }
+
+  /// Buka Google Maps dengan:
+  /// origin = GPS alat (cooler box), destination = tujuan pengiriman
+  Future<void> _openExternalNavigation() async {
+    if (_destinationLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tentukan tujuan pengiriman terlebih dahulu.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final originLat = _currentLocation.latitude;
+    final originLng = _currentLocation.longitude;
+    final destLat = _destinationLocation!.latitude;
+    final destLng = _destinationLocation!.longitude;
+
+    // Google Maps: dari GPS alat → ke tujuan
+    final googleMapsUrl = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1'
+          '&origin=$originLat,$originLng'
+          '&destination=$destLat,$destLng'
+          '&travelmode=driving',
+    );
+
+    if (await canLaunchUrl(googleMapsUrl)) {
+      await launchUrl(googleMapsUrl, mode: LaunchMode.externalApplication);
+    } else {
+      final geoUri = Uri.parse('geo:$destLat,$destLng?q=$destLat,$destLng');
+      if (await canLaunchUrl(geoUri)) {
+        await launchUrl(geoUri, mode: LaunchMode.externalApplication);
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Tidak dapat membuka aplikasi Maps.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Clear/hapus rute dan tujuan dari peta
+  void _clearRoute() {
+    setState(() {
+      _routePoints = [];
+      _showRoute = false;
+      _routeInfo = null;
+      _destinationLocation = null;
+      _destinationName = null;
+    });
+    _mapController.move(_currentLocation, 15.0);
+  }
+
+  /// Widget placeholder saat menunggu data dari alat
+  Widget _buildWaitingDeviceCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 52,
+            height: 52,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              color: Color(0xFFF59E0B),
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Menunggu Data dari Alat',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF92400E),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _isConnected
+                ? 'Terhubung ke server. Menunggu alat mengirimkan data...'
+                : 'Belum terhubung ke server MQTT.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFFB45309),
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildWaitingDot(0),
+              const SizedBox(width: 6),
+              _buildWaitingDot(150),
+              const SizedBox(width: 6),
+              _buildWaitingDot(300),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWaitingDot(int delayMs) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.3, end: 1.0),
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeInOut,
+      builder: (_, val, __) => Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF59E0B).withValues(alpha: val),
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
+  }
+
   Widget _buildMapWidget() {
     if (_mapLoadError) {
       return Container(
@@ -831,33 +1275,84 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                 }
               },
             ),
+            // Route polyline layer
+            if (_showRoute && _routePoints.isNotEmpty)
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: _routePoints,
+                    strokeWidth: 5.0,
+                    color: primaryBlue,
+                    borderStrokeWidth: 2.0,
+                    borderColor: Colors.white,
+                  ),
+                ],
+              ),
             // Marker layer
             MarkerLayer(
               markers: [
+                // Device marker (merah)
                 Marker(
                   point: _currentLocation,
-                  width: 40,
-                  height: 40,
+                  width: 44,
+                  height: 44,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.red,
+                      color: dangerRed,
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.white, width: 2),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha:0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           blurRadius: 4,
                           offset: const Offset(0, 2),
                         ),
                       ],
                     ),
                     child: const Icon(
-                      Icons.location_on,
+                      Icons.device_thermostat,
                       color: Colors.white,
-                      size: 24,
+                      size: 22,
                     ),
                   ),
                 ),
+                // Destination marker (hijau) — tampil jika tujuan sudah ditentukan
+                if (_destinationLocation != null && _showRoute)
+                  Marker(
+                    point: _destinationLocation!,
+                    width: 48,
+                    height: 56,
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: successGreen,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: successGreen.withValues(alpha: 0.4),
+                                blurRadius: 8,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.flag_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                        Container(
+                          width: 2,
+                          height: 12,
+                          color: successGreen,
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ],
@@ -899,388 +1394,574 @@ class _MonitoringScreenState extends State<MonitoringScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Simple Status Bar
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: _isConnected ? successGreen : dangerRed,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: (_isConnected ? successGreen : dangerRed)
-                          .withValues(alpha:0.3),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      _isConnected ? Icons.wifi : Icons.wifi_off,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _isConnected ? 'Terhubung' : 'Tidak Terhubung',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              // Status Bar — 3 kondisi
+              Builder(builder: (context) {
+                final Color barColor;
+                final IconData barIcon;
+                final String barText;
 
-              // Temperature Display Card
-              RepaintBoundary(
-                child: AnimatedBuilder(
-                  animation: _temperatureAnimation,
-                  builder: (context, child) {
-                    return Transform.scale(
-                      scale: 0.95 + (0.05 * _temperatureAnimation.value),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [cardWhite, cardWhite.withValues(alpha:0.9)],
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha:0.08),
-                              blurRadius: 20,
-                              offset: const Offset(0, 8),
-                            ),
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha:0.04),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Suhu Saat Ini',
-                                          style: TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w600,
-                                            color: textSecondary,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 12),
-                                        AnimatedBuilder(
-                                          animation:
-                                              _currentTemperature >
-                                                      _maxTemperature
-                                                  ? _pulseAnimation
-                                                  : _temperatureAnimation,
-                                          builder: (context, child) {
-                                            return Transform.scale(
-                                              scale:
-                                                  _currentTemperature >
-                                                          _maxTemperature
-                                                      ? _pulseAnimation.value
-                                                      : 1.0,
-                                              child: FittedBox(
-                                                fit: BoxFit.scaleDown,
-                                                alignment: Alignment.centerLeft,
-                                                child: Text(
-                                                  '${_currentTemperature.toStringAsFixed(1)}°C',
-                                                  maxLines: 1,
-                                                  style: TextStyle(
-                                                    fontSize: 42,
-                                                    fontWeight: FontWeight.w700,
-                                                    color:
-                                                        _currentTemperature >
-                                                                _maxTemperature
-                                                            ? dangerRed
-                                                            : _currentTemperature >
-                                                                (_maxTemperature *
-                                                                    0.8)
-                                                            ? warningOrange
-                                                            : primaryBlue,
-                                                    shadows: [
-                                                      Shadow(
-                                                        color: (_currentTemperature >
-                                                                    _maxTemperature
-                                                                ? dangerRed
-                                                                : primaryBlue)
-                                                            .withValues(alpha:0.3),
-                                                        blurRadius: 8,
-                                                        offset: const Offset(
-                                                          0,
-                                                          2,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.all(20),
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                        colors:
-                                            _currentTemperature >
-                                                    _maxTemperature
-                                                ? [
-                                                  dangerRed.withValues(alpha:0.1),
-                                                  dangerRed.withValues(alpha:0.05),
-                                                ]
-                                                : _currentTemperature >
-                                                    (_maxTemperature * 0.8)
-                                                ? [
-                                                  warningOrange.withValues(alpha:
-                                                    0.1,
-                                                  ),
-                                                  warningOrange.withValues(alpha:
-                                                    0.05,
-                                                  ),
-                                                ]
-                                                : [
-                                                  primaryBlue.withValues(alpha:0.1),
-                                                  primaryBlue.withValues(alpha:0.05),
-                                                ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: (_currentTemperature >
-                                                    _maxTemperature
-                                                ? dangerRed
-                                                : _currentTemperature >
-                                                    (_maxTemperature * 0.8)
-                                                ? warningOrange
-                                                : primaryBlue)
-                                            .withValues(alpha:0.2),
-                                        width: 2,
-                                      ),
-                                    ),
-                                    child: AnimatedBuilder(
-                                      animation:
-                                          _currentTemperature > _maxTemperature
-                                              ? _pulseAnimation
-                                              : _temperatureAnimation,
-                                      builder: (context, child) {
-                                        return Transform.scale(
-                                          scale:
-                                              _currentTemperature >
-                                                      _maxTemperature
-                                                  ? _pulseAnimation.value
-                                                  : 1.0,
-                                          child: Icon(
-                                            _getTemperatureIcon(
-                                              _currentTemperature,
-                                            ),
-                                            size: 48,
-                                            color:
-                                                _currentTemperature >
-                                                        _maxTemperature
-                                                    ? dangerRed
-                                                    : _currentTemperature >
-                                                        (_maxTemperature * 0.8)
-                                                    ? warningOrange
-                                                    : primaryBlue,
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 20),
-                              if (_currentTemperature > _maxTemperature)
-                                AnimatedContainer(
-                                  duration: const Duration(milliseconds: 300),
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: [
-                                        dangerRed.withValues(alpha:0.1),
-                                        dangerRed.withValues(alpha:0.05),
-                                      ],
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: dangerRed.withValues(alpha:0.3),
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: dangerRed.withValues(alpha:0.2),
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                        child: Icon(
-                                          Icons.warning_rounded,
-                                          color: dangerRed,
-                                          size: 20,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Text(
-                                          'PERINGATAN: Suhu melebihi batas maksimal (${_maxTemperature}°C)!',
-                                          style: TextStyle(
-                                            color: dangerRed,
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
+                if (!_isConnected) {
+                  barColor = dangerRed;
+                  barIcon = Icons.wifi_off;
+                  barText = 'Tidak Terhubung';
+                } else if (!_hasReceivedDeviceData) {
+                  barColor = const Color(0xFFF59E0B); // amber
+                  barIcon = Icons.hourglass_top_rounded;
+                  barText = 'Terhubung — Menunggu Data Alat...';
+                } else {
+                  barColor = successGreen;
+                  barIcon = Icons.wifi;
+                  barText = 'Terhubung';
+                }
 
-              const SizedBox(height: 24),
-
-              // Maps Card - Now using flutter_map
-              RepaintBoundary(
-                child: Container(
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [cardWhite, cardWhite.withValues(alpha:0.9)],
-                    ),
-                    borderRadius: BorderRadius.circular(20),
+                    color: barColor,
+                    borderRadius: BorderRadius.circular(8),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha:0.08),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      ),
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha:0.04),
-                        blurRadius: 6,
+                        color: barColor.withValues(alpha: 0.3),
+                        blurRadius: 4,
                         offset: const Offset(0, 2),
                       ),
                     ],
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    accentTeal.withValues(alpha:0.1),
-                                    accentTeal.withValues(alpha:0.05),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Spinner saat menunggu, ikon biasa jika tidak
+                      if (_isConnected && !_hasReceivedDeviceData)
+                        const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      else
+                        Icon(barIcon, color: Colors.white, size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        barText,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+
+              // Temperature Display Card — hanya tampil setelah data alat diterima
+              if (!_hasReceivedDeviceData)
+                _buildWaitingDeviceCard()
+              else
+                RepaintBoundary(
+                  child: AnimatedBuilder(
+                    animation: _temperatureAnimation,
+                    builder: (context, child) {
+                      return Transform.scale(
+                        scale: 0.95 + (0.05 * _temperatureAnimation.value),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [cardWhite, cardWhite.withValues(alpha:0.9)],
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha:0.08),
+                                blurRadius: 20,
+                                offset: const Offset(0, 8),
+                              ),
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha:0.04),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                  MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Suhu Saat Ini',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w600,
+                                              color: textSecondary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          AnimatedBuilder(
+                                            animation:
+                                            _currentTemperature >
+                                                _maxTemperature
+                                                ? _pulseAnimation
+                                                : _temperatureAnimation,
+                                            builder: (context, child) {
+                                              return Transform.scale(
+                                                scale:
+                                                _currentTemperature >
+                                                    _maxTemperature
+                                                    ? _pulseAnimation.value
+                                                    : 1.0,
+                                                child: FittedBox(
+                                                  fit: BoxFit.scaleDown,
+                                                  alignment: Alignment.centerLeft,
+                                                  child: Text(
+                                                    '${_currentTemperature.toStringAsFixed(1)}°C',
+                                                    maxLines: 1,
+                                                    style: TextStyle(
+                                                      fontSize: 42,
+                                                      fontWeight: FontWeight.w700,
+                                                      color:
+                                                      _currentTemperature >
+                                                          _maxTemperature
+                                                          ? dangerRed
+                                                          : _currentTemperature >
+                                                          (_maxTemperature *
+                                                              0.8)
+                                                          ? warningOrange
+                                                          : primaryBlue,
+                                                      shadows: [
+                                                        Shadow(
+                                                          color: (_currentTemperature >
+                                                              _maxTemperature
+                                                              ? dangerRed
+                                                              : primaryBlue)
+                                                              .withValues(alpha:0.3),
+                                                          blurRadius: 8,
+                                                          offset: const Offset(
+                                                            0,
+                                                            2,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.all(20),
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors:
+                                          _currentTemperature >
+                                              _maxTemperature
+                                              ? [
+                                            dangerRed.withValues(alpha:0.1),
+                                            dangerRed.withValues(alpha:0.05),
+                                          ]
+                                              : _currentTemperature >
+                                              (_maxTemperature * 0.8)
+                                              ? [
+                                            warningOrange.withValues(alpha:
+                                            0.1,
+                                            ),
+                                            warningOrange.withValues(alpha:
+                                            0.05,
+                                            ),
+                                          ]
+                                              : [
+                                            primaryBlue.withValues(alpha:0.1),
+                                            primaryBlue.withValues(alpha:0.05),
+                                          ],
+                                        ),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: (_currentTemperature >
+                                              _maxTemperature
+                                              ? dangerRed
+                                              : _currentTemperature >
+                                              (_maxTemperature * 0.8)
+                                              ? warningOrange
+                                              : primaryBlue)
+                                              .withValues(alpha:0.2),
+                                          width: 2,
+                                        ),
+                                      ),
+                                      child: AnimatedBuilder(
+                                        animation:
+                                        _currentTemperature > _maxTemperature
+                                            ? _pulseAnimation
+                                            : _temperatureAnimation,
+                                        builder: (context, child) {
+                                          return Transform.scale(
+                                            scale:
+                                            _currentTemperature >
+                                                _maxTemperature
+                                                ? _pulseAnimation.value
+                                                : 1.0,
+                                            child: Icon(
+                                              _getTemperatureIcon(
+                                                _currentTemperature,
+                                              ),
+                                              size: 48,
+                                              color:
+                                              _currentTemperature >
+                                                  _maxTemperature
+                                                  ? dangerRed
+                                                  : _currentTemperature >
+                                                  (_maxTemperature * 0.8)
+                                                  ? warningOrange
+                                                  : primaryBlue,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
                                   ],
                                 ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Icon(
-                                Icons.location_on_rounded,
-                                color: accentTeal,
-                                size: 24,
-                              ),
+                                const SizedBox(height: 20),
+                                if (_currentTemperature > _maxTemperature)
+                                  AnimatedContainer(
+                                    duration: const Duration(milliseconds: 300),
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          dangerRed.withValues(alpha:0.1),
+                                          dangerRed.withValues(alpha:0.05),
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: dangerRed.withValues(alpha:0.3),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: dangerRed.withValues(alpha:0.2),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                          child: Icon(
+                                            Icons.warning_rounded,
+                                            color: dangerRed,
+                                            size: 20,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Text(
+                                            'PERINGATAN: Suhu melebihi batas maksimal (${_maxTemperature}°C)!',
+                                            style: TextStyle(
+                                              color: dangerRed,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
                             ),
-                            const SizedBox(width: 12),
-                            Text(
-                              'Lokasi Device',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w600,
-                                color: textPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: Container(
-                            height: 250,
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: Colors.grey.shade200,
-                                width: 1,
-                              ),
-                            ),
-                            child: _buildMapWidget(),
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: backgroundGrey,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
+                      );
+                    },
+                  ),
+                ),
+
+              const SizedBox(height: 24),
+
+              // Maps Card — hanya tampil setelah data alat diterima
+              if (_hasReceivedDeviceData)
+                RepaintBoundary(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [cardWhite, cardWhite.withValues(alpha:0.9)],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha:0.08),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha:0.04),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              Icon(
-                                Icons.my_location_rounded,
-                                size: 16,
-                                color: textSecondary,
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      accentTeal.withValues(alpha:0.1),
+                                      accentTeal.withValues(alpha:0.05),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  Icons.location_on_rounded,
+                                  color: accentTeal,
+                                  size: 24,
+                                ),
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 12),
                               Text(
-                                'Koordinat: ${_currentLocation.latitude.toStringAsFixed(6)}, ${_currentLocation.longitude.toStringAsFixed(6)}',
+                                'Lokasi Device',
                                 style: TextStyle(
-                                  fontSize: 12,
-                                  color: textSecondary,
-                                  fontWeight: FontWeight.w500,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                  color: textPrimary,
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 20),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Container(
+                              height: 250,
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: Colors.grey.shade200,
+                                  width: 1,
+                                ),
+                              ),
+                              child: _buildMapWidget(),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: backgroundGrey,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.my_location_rounded,
+                                  size: 16,
+                                  color: textSecondary,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Koordinat: ${_currentLocation.latitude.toStringAsFixed(6)}, ${_currentLocation.longitude.toStringAsFixed(6)}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: textSecondary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Destination info row
+                          if (_destinationName != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: successGreen.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: successGreen.withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.flag_rounded, size: 15, color: successGreen),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        _destinationName!,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: successGreen,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    GestureDetector(
+                                      onTap: _clearRoute,
+                                      child: Icon(Icons.close, size: 15, color: successGreen),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                          // Route info: jarak, waktu, ETA
+                          if (_routeInfo != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: primaryBlue.withValues(alpha: 0.07),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: primaryBlue.withValues(alpha: 0.25),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.directions_car, size: 15, color: primaryBlue),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        _routeInfo!,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: primaryBlue,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                          // Navigation buttons
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              // Tombol Atur Tujuan / Hapus Rute
+                              Expanded(
+                                child: _isLoadingRoute
+                                    ? Container(
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(10),
+                                    color: Colors.grey.shade200,
+                                  ),
+                                  child: const Center(
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        ),
+                                        SizedBox(width: 8),
+                                        Text('Memuat rute...', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                                    : ElevatedButton.icon(
+                                  onPressed: _showRoute ? _clearRoute : _showDestinationDialog,
+                                  icon: Icon(
+                                    _showRoute ? Icons.close : Icons.add_location_alt_rounded,
+                                    size: 17,
+                                  ),
+                                  label: Text(
+                                    _showRoute ? 'Hapus Rute' : 'Atur Tujuan',
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _showRoute
+                                        ? Colors.grey.shade600
+                                        : primaryBlue,
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              // Tombol Buka Google Maps (hanya aktif jika tujuan sudah ada)
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: _destinationLocation != null
+                                      ? _openExternalNavigation
+                                      : null,
+                                  icon: const Icon(Icons.navigation_rounded, size: 17),
+                                  label: const Text(
+                                    'Buka Maps',
+                                    style: TextStyle(fontSize: 13),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: successGreen,
+                                    foregroundColor: Colors.white,
+                                    disabledBackgroundColor: Colors.grey.shade300,
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
 
               const SizedBox(height: 24),
 
@@ -1315,9 +1996,9 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                   child: Padding(
                     padding: EdgeInsets.symmetric(
                       horizontal:
-                          MediaQuery.of(context).size.width > 600 ? 24 : 16,
+                      MediaQuery.of(context).size.width > 600 ? 24 : 16,
                       vertical:
-                          MediaQuery.of(context).size.width > 600 ? 24 : 20,
+                      MediaQuery.of(context).size.width > 600 ? 24 : 20,
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1345,25 +2026,25 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                 Icons.tune_rounded,
                                 color: warningOrange,
                                 size:
-                                    MediaQuery.of(context).size.width > 600
-                                        ? 24
-                                        : 20,
+                                MediaQuery.of(context).size.width > 600
+                                    ? 24
+                                    : 20,
                               ),
                             ),
                             SizedBox(
                               width:
-                                  MediaQuery.of(context).size.width > 600
-                                      ? 12
-                                      : 8,
+                              MediaQuery.of(context).size.width > 600
+                                  ? 12
+                                  : 8,
                             ),
                             Expanded(
                               child: Text(
                                 'Pengaturan Suhu Maksimal',
                                 style: TextStyle(
                                   fontSize:
-                                      MediaQuery.of(context).size.width > 600
-                                          ? 20
-                                          : 18,
+                                  MediaQuery.of(context).size.width > 600
+                                      ? 20
+                                      : 18,
                                   fontWeight: FontWeight.w600,
                                   color: textPrimary,
                                 ),
@@ -1375,7 +2056,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                         ),
                         SizedBox(
                           height:
-                              MediaQuery.of(context).size.width > 600 ? 20 : 16,
+                          MediaQuery.of(context).size.width > 600 ? 20 : 16,
                         ),
 
                         // Input Row - Responsive Layout
@@ -1416,12 +2097,12 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                         ),
                                         border: InputBorder.none,
                                         contentPadding:
-                                            const EdgeInsets.symmetric(
-                                              horizontal: 16,
-                                              vertical: 12,
-                                            ),
+                                        const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 12,
+                                        ),
                                         counterText:
-                                            '', // Hide character counter
+                                        '', // Hide character counter
                                         prefixIcon: Container(
                                           margin: const EdgeInsets.all(8),
                                           padding: const EdgeInsets.all(6),
@@ -1447,37 +2128,37 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                     height: 48,
                                     decoration: BoxDecoration(
                                       gradient:
-                                          _isConnected
-                                              ? const LinearGradient(
-                                                colors: [
-                                                  primaryBlue,
-                                                  primaryDark,
-                                                ],
-                                              )
-                                              : LinearGradient(
-                                                colors: [
-                                                  Colors.grey.shade400,
-                                                  Colors.grey.shade500,
-                                                ],
-                                              ),
+                                      _isConnected
+                                          ? const LinearGradient(
+                                        colors: [
+                                          primaryBlue,
+                                          primaryDark,
+                                        ],
+                                      )
+                                          : LinearGradient(
+                                        colors: [
+                                          Colors.grey.shade400,
+                                          Colors.grey.shade500,
+                                        ],
+                                      ),
                                       borderRadius: BorderRadius.circular(12),
                                       boxShadow:
-                                          _isConnected
-                                              ? [
-                                                BoxShadow(
-                                                  color: primaryBlue
-                                                      .withValues(alpha:0.3),
-                                                  blurRadius: 8,
-                                                  offset: const Offset(0, 2),
-                                                ),
-                                              ]
-                                              : null,
+                                      _isConnected
+                                          ? [
+                                        BoxShadow(
+                                          color: primaryBlue
+                                              .withValues(alpha:0.3),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ]
+                                          : null,
                                     ),
                                     child: ElevatedButton(
                                       onPressed:
-                                          _isConnected
-                                              ? _sendMaxTemperature
-                                              : null,
+                                      _isConnected
+                                          ? _sendMaxTemperature
+                                          : null,
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: Colors.transparent,
                                         foregroundColor: Colors.white,
@@ -1540,16 +2221,16 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                             16,
                                           ),
                                           counterText:
-                                              '', // Hide character counter
+                                          '', // Hide character counter
                                           prefixIcon: Container(
                                             margin: const EdgeInsets.all(8),
                                             padding: const EdgeInsets.all(8),
                                             decoration: BoxDecoration(
                                               color: primaryBlue.withValues(alpha:
-                                                0.1,
+                                              0.1,
                                               ),
                                               borderRadius:
-                                                  BorderRadius.circular(8),
+                                              BorderRadius.circular(8),
                                             ),
                                             child: Icon(
                                               Icons.device_thermostat_rounded,
@@ -1571,37 +2252,37 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                       ),
                                       decoration: BoxDecoration(
                                         gradient:
-                                            _isConnected
-                                                ? const LinearGradient(
-                                                  colors: [
-                                                    primaryBlue,
-                                                    primaryDark,
-                                                  ],
-                                                )
-                                                : LinearGradient(
-                                                  colors: [
-                                                    Colors.grey.shade400,
-                                                    Colors.grey.shade500,
-                                                  ],
-                                                ),
+                                        _isConnected
+                                            ? const LinearGradient(
+                                          colors: [
+                                            primaryBlue,
+                                            primaryDark,
+                                          ],
+                                        )
+                                            : LinearGradient(
+                                          colors: [
+                                            Colors.grey.shade400,
+                                            Colors.grey.shade500,
+                                          ],
+                                        ),
                                         borderRadius: BorderRadius.circular(12),
                                         boxShadow:
-                                            _isConnected
-                                                ? [
-                                                  BoxShadow(
-                                                    color: primaryBlue
-                                                        .withValues(alpha:0.3),
-                                                    blurRadius: 8,
-                                                    offset: const Offset(0, 2),
-                                                  ),
-                                                ]
-                                                : null,
+                                        _isConnected
+                                            ? [
+                                          BoxShadow(
+                                            color: primaryBlue
+                                                .withValues(alpha:0.3),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ]
+                                            : null,
                                       ),
                                       child: ElevatedButton(
                                         onPressed:
-                                            _isConnected
-                                                ? _sendMaxTemperature
-                                                : null,
+                                        _isConnected
+                                            ? _sendMaxTemperature
+                                            : null,
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: Colors.transparent,
                                           foregroundColor: Colors.white,
@@ -1637,7 +2318,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
 
                         SizedBox(
                           height:
-                              MediaQuery.of(context).size.width > 600 ? 16 : 12,
+                          MediaQuery.of(context).size.width > 600 ? 16 : 12,
                         ),
 
                         // Info Container
@@ -1665,9 +2346,9 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                   'Suhu maksimal saat ini: ${_maxTemperature.toStringAsFixed(1)}°C',
                                   style: TextStyle(
                                     fontSize:
-                                        MediaQuery.of(context).size.width > 600
-                                            ? 14
-                                            : 13,
+                                    MediaQuery.of(context).size.width > 600
+                                        ? 14
+                                        : 13,
                                     color: textSecondary,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -1717,9 +2398,9 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                   child: Padding(
                     padding: EdgeInsets.symmetric(
                       horizontal:
-                          MediaQuery.of(context).size.width > 600 ? 24 : 16,
+                      MediaQuery.of(context).size.width > 600 ? 24 : 16,
                       vertical:
-                          MediaQuery.of(context).size.width > 600 ? 24 : 20,
+                      MediaQuery.of(context).size.width > 600 ? 24 : 20,
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1747,25 +2428,25 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                 Icons.schedule_rounded,
                                 color: accentTeal,
                                 size:
-                                    MediaQuery.of(context).size.width > 600
-                                        ? 24
-                                        : 20,
+                                MediaQuery.of(context).size.width > 600
+                                    ? 24
+                                    : 20,
                               ),
                             ),
                             SizedBox(
                               width:
-                                  MediaQuery.of(context).size.width > 600
-                                      ? 12
-                                      : 8,
+                              MediaQuery.of(context).size.width > 600
+                                  ? 12
+                                  : 8,
                             ),
                             Expanded(
                               child: Text(
                                 'Pengaturan Waktu Penyimpanan',
                                 style: TextStyle(
                                   fontSize:
-                                      MediaQuery.of(context).size.width > 600
-                                          ? 20
-                                          : 18,
+                                  MediaQuery.of(context).size.width > 600
+                                      ? 20
+                                      : 18,
                                   fontWeight: FontWeight.w600,
                                   color: textPrimary,
                                 ),
@@ -1777,7 +2458,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                         ),
                         SizedBox(
                           height:
-                              MediaQuery.of(context).size.width > 600 ? 20 : 16,
+                          MediaQuery.of(context).size.width > 600 ? 20 : 16,
                         ),
 
                         // Time Input Fields - Grid Layout
@@ -1819,22 +2500,22 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                             ),
                                             border: InputBorder.none,
                                             contentPadding:
-                                                EdgeInsets.symmetric(
-                                                  horizontal:
-                                                      isSmallScreen ? 12 : 16,
-                                                  vertical:
-                                                      isSmallScreen ? 12 : 16,
-                                                ),
+                                            EdgeInsets.symmetric(
+                                              horizontal:
+                                              isSmallScreen ? 12 : 16,
+                                              vertical:
+                                              isSmallScreen ? 12 : 16,
+                                            ),
                                             counterText: '',
                                             prefixIcon: Container(
                                               margin: const EdgeInsets.all(8),
                                               padding: const EdgeInsets.all(6),
                                               decoration: BoxDecoration(
                                                 color: accentTeal.withValues(alpha:
-                                                  0.1,
+                                                0.1,
                                                 ),
                                                 borderRadius:
-                                                    BorderRadius.circular(8),
+                                                BorderRadius.circular(8),
                                               ),
                                               child: Icon(
                                                 Icons.calendar_today_rounded,
@@ -1876,22 +2557,22 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                             ),
                                             border: InputBorder.none,
                                             contentPadding:
-                                                EdgeInsets.symmetric(
-                                                  horizontal:
-                                                      isSmallScreen ? 12 : 16,
-                                                  vertical:
-                                                      isSmallScreen ? 12 : 16,
-                                                ),
+                                            EdgeInsets.symmetric(
+                                              horizontal:
+                                              isSmallScreen ? 12 : 16,
+                                              vertical:
+                                              isSmallScreen ? 12 : 16,
+                                            ),
                                             counterText: '',
                                             prefixIcon: Container(
                                               margin: const EdgeInsets.all(8),
                                               padding: const EdgeInsets.all(6),
                                               decoration: BoxDecoration(
                                                 color: primaryBlue.withValues(alpha:
-                                                  0.1,
+                                                0.1,
                                                 ),
                                                 borderRadius:
-                                                    BorderRadius.circular(8),
+                                                BorderRadius.circular(8),
                                               ),
                                               child: Icon(
                                                 Icons.access_time_rounded,
@@ -1938,12 +2619,12 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                             ),
                                             border: InputBorder.none,
                                             contentPadding:
-                                                EdgeInsets.symmetric(
-                                                  horizontal:
-                                                      isSmallScreen ? 12 : 16,
-                                                  vertical:
-                                                      isSmallScreen ? 12 : 16,
-                                                ),
+                                            EdgeInsets.symmetric(
+                                              horizontal:
+                                              isSmallScreen ? 12 : 16,
+                                              vertical:
+                                              isSmallScreen ? 12 : 16,
+                                            ),
                                             counterText: '',
                                             prefixIcon: Container(
                                               margin: const EdgeInsets.all(8),
@@ -1952,7 +2633,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                                 color: warningOrange
                                                     .withValues(alpha:0.1),
                                                 borderRadius:
-                                                    BorderRadius.circular(8),
+                                                BorderRadius.circular(8),
                                               ),
                                               child: Icon(
                                                 Icons.timer_rounded,
@@ -1994,22 +2675,22 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                             ),
                                             border: InputBorder.none,
                                             contentPadding:
-                                                EdgeInsets.symmetric(
-                                                  horizontal:
-                                                      isSmallScreen ? 12 : 16,
-                                                  vertical:
-                                                      isSmallScreen ? 12 : 16,
-                                                ),
+                                            EdgeInsets.symmetric(
+                                              horizontal:
+                                              isSmallScreen ? 12 : 16,
+                                              vertical:
+                                              isSmallScreen ? 12 : 16,
+                                            ),
                                             counterText: '',
                                             prefixIcon: Container(
                                               margin: const EdgeInsets.all(8),
                                               padding: const EdgeInsets.all(6),
                                               decoration: BoxDecoration(
                                                 color: successGreen.withValues(alpha:
-                                                  0.1,
+                                                0.1,
                                                 ),
                                                 borderRadius:
-                                                    BorderRadius.circular(8),
+                                                BorderRadius.circular(8),
                                               ),
                                               child: Icon(
                                                 Icons.timer_10_rounded,
@@ -2036,36 +2717,36 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                           height: 48,
                           decoration: BoxDecoration(
                             gradient:
-                                (_isConnected && !_isTimeConfigLoading)
-                                    ? LinearGradient(
-                                      colors: [
-                                        accentTeal,
-                                        accentTeal.withValues(alpha:0.8),
-                                      ],
-                                    )
-                                    : LinearGradient(
-                                      colors: [
-                                        Colors.grey.shade400,
-                                        Colors.grey.shade500,
-                                      ],
-                                    ),
+                            (_isConnected && !_isTimeConfigLoading)
+                                ? LinearGradient(
+                              colors: [
+                                accentTeal,
+                                accentTeal.withValues(alpha:0.8),
+                              ],
+                            )
+                                : LinearGradient(
+                              colors: [
+                                Colors.grey.shade400,
+                                Colors.grey.shade500,
+                              ],
+                            ),
                             borderRadius: BorderRadius.circular(12),
                             boxShadow:
-                                (_isConnected && !_isTimeConfigLoading)
-                                    ? [
-                                      BoxShadow(
-                                        color: accentTeal.withValues(alpha:0.3),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ]
-                                    : null,
+                            (_isConnected && !_isTimeConfigLoading)
+                                ? [
+                              BoxShadow(
+                                color: accentTeal.withValues(alpha:0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ]
+                                : null,
                           ),
                           child: ElevatedButton(
                             onPressed:
-                                (_isConnected && !_isTimeConfigLoading)
-                                    ? _sendTimeConfiguration
-                                    : null,
+                            (_isConnected && !_isTimeConfigLoading)
+                                ? _sendTimeConfiguration
+                                : null,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.transparent,
                               foregroundColor: Colors.white,
@@ -2079,39 +2760,39 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                               ),
                             ),
                             child:
-                                _isTimeConfigLoading
-                                    ? Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            valueColor:
-                                                AlwaysStoppedAnimation<Color>(
-                                                  Colors.white,
-                                                ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        const Text(
-                                          'Mengirim...',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                    : const Text(
-                                      'Set Waktu Penyimpanan',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 16,
-                                      ),
+                            _isTimeConfigLoading
+                                ? Row(
+                              mainAxisAlignment:
+                              MainAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor:
+                                    AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
                                     ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                const Text(
+                                  'Mengirim...',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            )
+                                : const Text(
+                              'Set Waktu Penyimpanan',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                              ),
+                            ),
                           ),
                         ),
 
@@ -2151,9 +2832,9 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                   'Waktu penyimpanan saat ini: ${_storageDays}d ${_storageHours}h ${_storageMinutes}m ${_storageSeconds}s',
                                   style: TextStyle(
                                     fontSize:
-                                        MediaQuery.of(context).size.width > 600
-                                            ? 14
-                                            : 13,
+                                    MediaQuery.of(context).size.width > 600
+                                        ? 14
+                                        : 13,
                                     color: textSecondary,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -2262,7 +2943,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
       type: PopupType.temperature,
       title: 'Peringatan Suhu Tinggi!',
       message:
-          'Suhu telah mencapai/melampaui batas maksimum ${currentTemp.toStringAsFixed(1)}°C',
+      'Suhu telah mencapai/melampaui batas maksimum ${currentTemp.toStringAsFixed(1)}°C',
       subMessage: 'Segera periksa perangkat',
       icon: Icons.thermostat,
       primaryColor: dangerRed,

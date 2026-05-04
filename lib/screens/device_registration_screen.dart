@@ -21,6 +21,7 @@ class _DeviceRegistrationScreenState extends State<DeviceRegistrationScreen> {
 
 
   bool _isLoadingDevices = false;
+  bool _isLoading = false;
   List<Device> _devices = [];
   String? _selectedDeviceId;
 

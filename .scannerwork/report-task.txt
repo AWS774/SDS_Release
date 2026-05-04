@@ -1,0 +1,7 @@
+organization=aws774
+projectKey=AWS774_SDS_Release
+serverUrl=https://sonarcloud.io
+serverVersion=8.0.0.85361
+dashboardUrl=https://sonarcloud.io/dashboard?id=AWS774_SDS_Release
+ceTaskId=AZ2MnRcF9g00n0Aj5ofb
+ceTaskUrl=https://sonarcloud.io/api/ce/task?id=AZ2MnRcF9g00n0Aj5ofb
