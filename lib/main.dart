@@ -7,6 +7,7 @@ import 'dart:io';
 
 import 'config/supabase_config.dart';
 import 'services/auth_service.dart';
+import 'services/background_service.dart'; // ← TAMBAHAN
 import 'screens/login_screen.dart';
 import 'screens/monitoring_screen.dart';
 import 'screens/device_registration_screen.dart';
@@ -24,6 +25,9 @@ void main() async {
     url: SupabaseConfig.supabaseUrl,
     anonKey: SupabaseConfig.supabaseAnonKey,
   );
+
+  // Initialize Background Service ← TAMBAHAN
+  await initializeBackgroundService();
 
   runApp(const MyApp());
 }
