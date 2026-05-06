@@ -10,6 +10,11 @@ import 'services/auth_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/monitoring_screen.dart';
 import 'screens/device_registration_screen.dart';
+import 'theme/app_theme.dart';
+import 'theme/theme_notifier.dart';
+
+/// Global ThemeNotifier — bisa diakses dari mana saja
+final ThemeNotifier themeNotifier = ThemeNotifier();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,21 +33,26 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'MQTT Cooler Box',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
-      // Tambahkan routes untuk kompatibilitas navigasi named
-      routes: {
-        '/login': (context) => const LoginScreen(),
+    return ListenableBuilder(
+      listenable: themeNotifier,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'MQTT Cooler Box',
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeNotifier.themeMode,
+          debugShowCheckedModeBanner: false,
+          // Tambahkan routes untuk kompatibilitas navigasi named
+          routes: {
+            '/login': (context) => const LoginScreen(),
+          },
+          // Fallback jika ada route tak dikenal
+          onUnknownRoute: (settings) => MaterialPageRoute(
+            builder: (context) => const AuthWrapper(),
+          ),
+          home: const AuthWrapper(),
+        );
       },
-      // Fallback jika ada route tak dikenal
-      onUnknownRoute: (settings) => MaterialPageRoute(
-        builder: (context) => const AuthWrapper(),
-      ),
-      home: const AuthWrapper(),
     );
   }
 }

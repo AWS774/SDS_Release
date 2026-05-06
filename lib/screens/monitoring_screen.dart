@@ -13,6 +13,9 @@ import '../services/database_service.dart';
 import '../widgets/storage_time_info.dart';
 import '../models/device.dart';
 import 'package:flutter/foundation.dart';
+import '../theme/app_theme.dart';
+import '../theme/theme_notifier.dart';
+import '../main.dart' show themeNotifier;
 
 // Enum for popup types
 enum PopupType { temperature, time }
@@ -87,17 +90,23 @@ class _MonitoringScreenState extends State<MonitoringScreen>
   // Storage time data from database
   Map<String, dynamic>? _storageTimeData;
 
-  // Modern color scheme
-  static const Color primaryBlue = Color(0xFF2196F3);
-  static const Color primaryDark = Color(0xFF1976D2);
+  // Modern color scheme — dark mode aware
   static const Color accentTeal = Color(0xFF00BCD4);
   static const Color warningOrange = Color(0xFFFF9800);
-  static const Color dangerRed = Color(0xFFE53935);
-  static const Color successGreen = Color(0xFF4CAF50);
-  static const Color backgroundGrey = Color(0xFFF5F7FA);
-  static const Color cardWhite = Color(0xFFFFFFFF);
-  static const Color textPrimary = Color(0xFF2C3E50);
-  static const Color textSecondary = Color(0xFF7B8794);
+
+  bool get _isDark => themeNotifier.isDarkMode;
+
+  Color get primaryBlue  => _isDark ? AppTheme.darkPrimaryBlue  : AppTheme.lightPrimaryBlue;
+  Color get primaryDark  => _isDark ? AppTheme.darkPrimaryDark  : AppTheme.lightPrimaryDark;
+  Color get dangerRed    => AppTheme.dangerRed;
+  Color get successGreen => AppTheme.successGreen;
+  Color get backgroundGrey => _isDark ? AppTheme.darkBackground : const Color(0xFFF5F7FA);
+  Color get cardWhite    => _isDark ? AppTheme.darkCard          : Colors.white;
+  Color get cardElevated => _isDark ? AppTheme.darkCardElevated  : Colors.white;
+  Color get textPrimary  => _isDark ? AppTheme.darkTextPrimary   : const Color(0xFF2C3E50);
+  Color get textSecondary=> _isDark ? AppTheme.darkTextSecondary : const Color(0xFF7B8794);
+  Color get inputFill    => _isDark ? AppTheme.darkInputFill     : Colors.white;
+  Color get inputBorder  => _isDark ? AppTheme.darkDivider       : Colors.grey.shade300;
 
   @override
   void initState() {
@@ -1196,8 +1205,8 @@ class _MonitoringScreenState extends State<MonitoringScreen>
         height: 250,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey.shade300),
-          color: Colors.grey.shade100,
+          border: Border.all(color: inputBorder),
+          color: inputFill,
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1240,7 +1249,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
       height: 250,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: inputBorder),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
@@ -1363,354 +1372,625 @@ class _MonitoringScreenState extends State<MonitoringScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: backgroundGrey,
-      appBar: AppBar(
-        elevation: 0,
-        title: Text(
-          widget.device != null
-              ? 'Monitoring ${widget.device!.name}'
-              : 'Monitoring Suhu',
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 20,
-            color: cardWhite,
-          ),
-        ),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [primaryBlue, primaryDark],
+    return ListenableBuilder(
+      listenable: themeNotifier,
+      builder: (context, _) => Scaffold(
+        backgroundColor: backgroundGrey,
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: _isDark ? AppTheme.darkSurface : primaryBlue,
+          foregroundColor: _isDark ? AppTheme.darkTextPrimary : Colors.white,
+          title: Text(
+            widget.device != null
+                ? 'Monitoring ${widget.device!.name}'
+                : 'Monitoring Suhu',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 20,
+              color: cardWhite,
             ),
           ),
+          flexibleSpace: _isDark ? null : Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [primaryBlue, primaryDark],
+              ),
+            ),
+          ),
+          actions: const [],
         ),
-        actions: const [],
-      ),
-      body: RepaintBoundary(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Status Bar — 3 kondisi
-              Builder(builder: (context) {
-                final Color barColor;
-                final IconData barIcon;
-                final String barText;
+        body: RepaintBoundary(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Status Bar — 3 kondisi
+                Builder(builder: (context) {
+                  final Color barColor;
+                  final IconData barIcon;
+                  final String barText;
 
-                if (!_isConnected) {
-                  barColor = dangerRed;
-                  barIcon = Icons.wifi_off;
-                  barText = 'Tidak Terhubung';
-                } else if (!_hasReceivedDeviceData) {
-                  barColor = const Color(0xFFF59E0B); // amber
-                  barIcon = Icons.hourglass_top_rounded;
-                  barText = 'Terhubung — Menunggu Data Alat...';
-                } else {
-                  barColor = successGreen;
-                  barIcon = Icons.wifi;
-                  barText = 'Terhubung';
-                }
+                  if (!_isConnected) {
+                    barColor = dangerRed;
+                    barIcon = Icons.wifi_off;
+                    barText = 'Tidak Terhubung';
+                  } else if (!_hasReceivedDeviceData) {
+                    barColor = const Color(0xFFF59E0B); // amber
+                    barIcon = Icons.hourglass_top_rounded;
+                    barText = 'Terhubung — Menunggu Data Alat...';
+                  } else {
+                    barColor = successGreen;
+                    barIcon = Icons.wifi;
+                    barText = 'Terhubung';
+                  }
 
-                return Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: barColor,
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: [
-                      BoxShadow(
-                        color: barColor.withValues(alpha: 0.3),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Spinner saat menunggu, ikon biasa jika tidak
-                      if (_isConnected && !_hasReceivedDeviceData)
-                        const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      else
-                        Icon(barIcon, color: Colors.white, size: 16),
-                      const SizedBox(width: 8),
-                      Text(
-                        barText,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: barColor,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: barColor.withValues(alpha: 0.3),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-
-              // Temperature Display Card — hanya tampil setelah data alat diterima
-              if (!_hasReceivedDeviceData)
-                _buildWaitingDeviceCard()
-              else
-                RepaintBoundary(
-                  child: AnimatedBuilder(
-                    animation: _temperatureAnimation,
-                    builder: (context, child) {
-                      return Transform.scale(
-                        scale: 0.95 + (0.05 * _temperatureAnimation.value),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [cardWhite, cardWhite.withValues(alpha:0.9)],
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Spinner saat menunggu, ikon biasa jika tidak
+                        if (_isConnected && !_hasReceivedDeviceData)
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
                             ),
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha:0.08),
-                                blurRadius: 20,
-                                offset: const Offset(0, 8),
-                              ),
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha:0.04),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
+                          )
+                        else
+                          Icon(barIcon, color: Colors.white, size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          barText,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
                           ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                  MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'Suhu Saat Ini',
-                                            style: TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w600,
-                                              color: textSecondary,
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+
+                // Temperature Display Card — hanya tampil setelah data alat diterima
+                if (!_hasReceivedDeviceData)
+                  _buildWaitingDeviceCard()
+                else
+                  RepaintBoundary(
+                    child: AnimatedBuilder(
+                      animation: _temperatureAnimation,
+                      builder: (context, child) {
+                        return Transform.scale(
+                          scale: 0.95 + (0.05 * _temperatureAnimation.value),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [cardWhite, cardElevated],
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha:0.08),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 8),
+                                ),
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha:0.04),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Suhu Saat Ini',
+                                              style: TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.w600,
+                                                color: textSecondary,
+                                              ),
                                             ),
-                                          ),
-                                          const SizedBox(height: 12),
-                                          AnimatedBuilder(
-                                            animation:
-                                            _currentTemperature >
-                                                _maxTemperature
-                                                ? _pulseAnimation
-                                                : _temperatureAnimation,
-                                            builder: (context, child) {
-                                              return Transform.scale(
-                                                scale:
-                                                _currentTemperature >
-                                                    _maxTemperature
-                                                    ? _pulseAnimation.value
-                                                    : 1.0,
-                                                child: FittedBox(
-                                                  fit: BoxFit.scaleDown,
-                                                  alignment: Alignment.centerLeft,
-                                                  child: Text(
-                                                    '${_currentTemperature.toStringAsFixed(1)}°C',
-                                                    maxLines: 1,
-                                                    style: TextStyle(
-                                                      fontSize: 42,
-                                                      fontWeight: FontWeight.w700,
-                                                      color:
-                                                      _currentTemperature >
-                                                          _maxTemperature
-                                                          ? dangerRed
-                                                          : _currentTemperature >
-                                                          (_maxTemperature *
-                                                              0.8)
-                                                          ? warningOrange
-                                                          : primaryBlue,
-                                                      shadows: [
-                                                        Shadow(
-                                                          color: (_currentTemperature >
-                                                              _maxTemperature
-                                                              ? dangerRed
-                                                              : primaryBlue)
-                                                              .withValues(alpha:0.3),
-                                                          blurRadius: 8,
-                                                          offset: const Offset(
-                                                            0,
-                                                            2,
+                                            const SizedBox(height: 12),
+                                            AnimatedBuilder(
+                                              animation:
+                                              _currentTemperature >
+                                                  _maxTemperature
+                                                  ? _pulseAnimation
+                                                  : _temperatureAnimation,
+                                              builder: (context, child) {
+                                                return Transform.scale(
+                                                  scale:
+                                                  _currentTemperature >
+                                                      _maxTemperature
+                                                      ? _pulseAnimation.value
+                                                      : 1.0,
+                                                  child: FittedBox(
+                                                    fit: BoxFit.scaleDown,
+                                                    alignment: Alignment.centerLeft,
+                                                    child: Text(
+                                                      '${_currentTemperature.toStringAsFixed(1)}°C',
+                                                      maxLines: 1,
+                                                      style: TextStyle(
+                                                        fontSize: 42,
+                                                        fontWeight: FontWeight.w700,
+                                                        color:
+                                                        _currentTemperature >
+                                                            _maxTemperature
+                                                            ? dangerRed
+                                                            : _currentTemperature >
+                                                            (_maxTemperature *
+                                                                0.8)
+                                                            ? warningOrange
+                                                            : primaryBlue,
+                                                        shadows: [
+                                                          Shadow(
+                                                            color: (_currentTemperature >
+                                                                _maxTemperature
+                                                                ? dangerRed
+                                                                : primaryBlue)
+                                                                .withValues(alpha:0.3),
+                                                            blurRadius: 8,
+                                                            offset: const Offset(
+                                                              0,
+                                                              2,
+                                                            ),
                                                           ),
-                                                        ),
-                                                      ],
+                                                        ],
+                                                      ),
                                                     ),
                                                   ),
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                        ],
+                                                );
+                                              },
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.all(20),
+                                      Container(
+                                        padding: const EdgeInsets.all(20),
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                            colors:
+                                            _currentTemperature >
+                                                _maxTemperature
+                                                ? [
+                                              dangerRed.withValues(alpha:0.1),
+                                              dangerRed.withValues(alpha:0.05),
+                                            ]
+                                                : _currentTemperature >
+                                                (_maxTemperature * 0.8)
+                                                ? [
+                                              warningOrange.withValues(alpha:
+                                              0.1,
+                                              ),
+                                              warningOrange.withValues(alpha:
+                                              0.05,
+                                              ),
+                                            ]
+                                                : [
+                                              primaryBlue.withValues(alpha:0.1),
+                                              primaryBlue.withValues(alpha:0.05),
+                                            ],
+                                          ),
+                                          borderRadius: BorderRadius.circular(20),
+                                          border: Border.all(
+                                            color: (_currentTemperature >
+                                                _maxTemperature
+                                                ? dangerRed
+                                                : _currentTemperature >
+                                                (_maxTemperature * 0.8)
+                                                ? warningOrange
+                                                : primaryBlue)
+                                                .withValues(alpha:0.2),
+                                            width: 2,
+                                          ),
+                                        ),
+                                        child: AnimatedBuilder(
+                                          animation:
+                                          _currentTemperature > _maxTemperature
+                                              ? _pulseAnimation
+                                              : _temperatureAnimation,
+                                          builder: (context, child) {
+                                            return Transform.scale(
+                                              scale:
+                                              _currentTemperature >
+                                                  _maxTemperature
+                                                  ? _pulseAnimation.value
+                                                  : 1.0,
+                                              child: Icon(
+                                                _getTemperatureIcon(
+                                                  _currentTemperature,
+                                                ),
+                                                size: 48,
+                                                color:
+                                                _currentTemperature >
+                                                    _maxTemperature
+                                                    ? dangerRed
+                                                    : _currentTemperature >
+                                                    (_maxTemperature * 0.8)
+                                                    ? warningOrange
+                                                    : primaryBlue,
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 20),
+                                  if (_currentTemperature > _maxTemperature)
+                                    AnimatedContainer(
+                                      duration: const Duration(milliseconds: 300),
+                                      padding: const EdgeInsets.all(16),
                                       decoration: BoxDecoration(
                                         gradient: LinearGradient(
                                           begin: Alignment.topLeft,
                                           end: Alignment.bottomRight,
-                                          colors:
-                                          _currentTemperature >
-                                              _maxTemperature
-                                              ? [
+                                          colors: [
                                             dangerRed.withValues(alpha:0.1),
                                             dangerRed.withValues(alpha:0.05),
-                                          ]
-                                              : _currentTemperature >
-                                              (_maxTemperature * 0.8)
-                                              ? [
-                                            warningOrange.withValues(alpha:
-                                            0.1,
-                                            ),
-                                            warningOrange.withValues(alpha:
-                                            0.05,
-                                            ),
-                                          ]
-                                              : [
-                                            primaryBlue.withValues(alpha:0.1),
-                                            primaryBlue.withValues(alpha:0.05),
                                           ],
                                         ),
-                                        borderRadius: BorderRadius.circular(20),
+                                        borderRadius: BorderRadius.circular(12),
                                         border: Border.all(
-                                          color: (_currentTemperature >
-                                              _maxTemperature
-                                              ? dangerRed
-                                              : _currentTemperature >
-                                              (_maxTemperature * 0.8)
-                                              ? warningOrange
-                                              : primaryBlue)
-                                              .withValues(alpha:0.2),
-                                          width: 2,
+                                          color: dangerRed.withValues(alpha:0.3),
+                                          width: 1,
                                         ),
                                       ),
-                                      child: AnimatedBuilder(
-                                        animation:
-                                        _currentTemperature > _maxTemperature
-                                            ? _pulseAnimation
-                                            : _temperatureAnimation,
-                                        builder: (context, child) {
-                                          return Transform.scale(
-                                            scale:
-                                            _currentTemperature >
-                                                _maxTemperature
-                                                ? _pulseAnimation.value
-                                                : 1.0,
-                                            child: Icon(
-                                              _getTemperatureIcon(
-                                                _currentTemperature,
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: dangerRed.withValues(alpha:0.2),
+                                              borderRadius: BorderRadius.circular(
+                                                8,
                                               ),
-                                              size: 48,
-                                              color:
-                                              _currentTemperature >
-                                                  _maxTemperature
-                                                  ? dangerRed
-                                                  : _currentTemperature >
-                                                  (_maxTemperature * 0.8)
-                                                  ? warningOrange
-                                                  : primaryBlue,
                                             ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 20),
-                                if (_currentTemperature > _maxTemperature)
-                                  AnimatedContainer(
-                                    duration: const Duration(milliseconds: 300),
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                        colors: [
-                                          dangerRed.withValues(alpha:0.1),
-                                          dangerRed.withValues(alpha:0.05),
+                                            child: Icon(
+                                              Icons.warning_rounded,
+                                              color: dangerRed,
+                                              size: 20,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Text(
+                                              'PERINGATAN: Suhu melebihi batas maksimal (${_maxTemperature}°C)!',
+                                              style: TextStyle(
+                                                color: dangerRed,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          ),
                                         ],
                                       ),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: dangerRed.withValues(alpha:0.3),
-                                        width: 1,
-                                      ),
                                     ),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: dangerRed.withValues(alpha:0.2),
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                          ),
-                                          child: Icon(
-                                            Icons.warning_rounded,
-                                            color: dangerRed,
-                                            size: 20,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Text(
-                                            'PERINGATAN: Suhu melebihi batas maksimal (${_maxTemperature}°C)!',
-                                            style: TextStyle(
-                                              color: dangerRed,
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
-                ),
 
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-              // Maps Card — hanya tampil setelah data alat diterima
-              if (_hasReceivedDeviceData)
+                // Maps Card — hanya tampil setelah data alat diterima
+                if (_hasReceivedDeviceData)
+                  RepaintBoundary(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [cardWhite, cardElevated],
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha:0.08),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          ),
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha:0.04),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        accentTeal.withValues(alpha:0.1),
+                                        accentTeal.withValues(alpha:0.05),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(
+                                    Icons.location_on_rounded,
+                                    color: accentTeal,
+                                    size: 24,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  'Lokasi Device',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
+                                    color: textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: Container(
+                                height: 250,
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: Colors.grey.shade200,
+                                    width: 1,
+                                  ),
+                                ),
+                                child: _buildMapWidget(),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: backgroundGrey,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.my_location_rounded,
+                                    size: 16,
+                                    color: textSecondary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Koordinat: ${_currentLocation.latitude.toStringAsFixed(6)}, ${_currentLocation.longitude.toStringAsFixed(6)}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: textSecondary,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            // Destination info row
+                            if (_destinationName != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: successGreen.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: successGreen.withValues(alpha: 0.3),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.flag_rounded, size: 15, color: successGreen),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          _destinationName!,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: successGreen,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      GestureDetector(
+                                        onTap: _clearRoute,
+                                        child: Icon(Icons.close, size: 15, color: successGreen),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                            // Route info: jarak, waktu, ETA
+                            if (_routeInfo != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: primaryBlue.withValues(alpha: 0.07),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: primaryBlue.withValues(alpha: 0.25),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.directions_car, size: 15, color: primaryBlue),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          _routeInfo!,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: primaryBlue,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                            // Navigation buttons
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                // Tombol Atur Tujuan / Hapus Rute
+                                Expanded(
+                                  child: _isLoadingRoute
+                                      ? Container(
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(10),
+                                      color: Colors.grey.shade200,
+                                    ),
+                                    child: const Center(
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                          ),
+                                          SizedBox(width: 8),
+                                          Text('Memuat rute...', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                      : ElevatedButton.icon(
+                                    onPressed: _showRoute ? _clearRoute : _showDestinationDialog,
+                                    icon: Icon(
+                                      _showRoute ? Icons.close : Icons.add_location_alt_rounded,
+                                      size: 17,
+                                    ),
+                                    label: Text(
+                                      _showRoute ? 'Hapus Rute' : 'Atur Tujuan',
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: _showRoute
+                                          ? Colors.grey.shade600
+                                          : primaryBlue,
+                                      foregroundColor: Colors.white,
+                                      elevation: 0,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(vertical: 10),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // Tombol Buka Google Maps (hanya aktif jika tujuan sudah ada)
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: _destinationLocation != null
+                                        ? _openExternalNavigation
+                                        : null,
+                                    icon: const Icon(Icons.navigation_rounded, size: 17),
+                                    label: const Text(
+                                      'Buka Maps',
+                                      style: TextStyle(fontSize: 13),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: successGreen,
+                                      foregroundColor: Colors.white,
+                                      disabledBackgroundColor: Colors.grey.shade300,
+                                      elevation: 0,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(vertical: 10),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                const SizedBox(height: 24),
+
+                // Temperature Settings Card
                 RepaintBoundary(
                   child: Container(
+                    width: double.infinity,
+                    constraints: BoxConstraints(
+                      minHeight: 200,
+                      maxWidth: MediaQuery.of(context).size.width - 32,
+                    ),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [cardWhite, cardWhite.withValues(alpha:0.9)],
+                        colors: [cardWhite, cardElevated],
                       ),
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
@@ -1727,477 +2007,89 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                       ],
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.all(24),
+                      padding: EdgeInsets.symmetric(
+                        horizontal:
+                        MediaQuery.of(context).size.width > 600 ? 24 : 16,
+                        vertical:
+                        MediaQuery.of(context).size.width > 600 ? 24 : 20,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
+                          // Header Row
                           Row(
                             children: [
                               Container(
-                                padding: const EdgeInsets.all(12),
+                                padding: EdgeInsets.all(
+                                  MediaQuery.of(context).size.width > 600
+                                      ? 12
+                                      : 10,
+                                ),
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     colors: [
-                                      accentTeal.withValues(alpha:0.1),
-                                      accentTeal.withValues(alpha:0.05),
+                                      warningOrange.withValues(alpha:0.1),
+                                      warningOrange.withValues(alpha:0.05),
                                     ],
                                   ),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Icon(
-                                  Icons.location_on_rounded,
-                                  color: accentTeal,
-                                  size: 24,
+                                  Icons.tune_rounded,
+                                  color: warningOrange,
+                                  size:
+                                  MediaQuery.of(context).size.width > 600
+                                      ? 24
+                                      : 20,
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Lokasi Device',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w600,
-                                  color: textPrimary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: Container(
-                              height: 250,
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: Colors.grey.shade200,
-                                  width: 1,
-                                ),
-                              ),
-                              child: _buildMapWidget(),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: backgroundGrey,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.my_location_rounded,
-                                  size: 16,
-                                  color: textSecondary,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Koordinat: ${_currentLocation.latitude.toStringAsFixed(6)}, ${_currentLocation.longitude.toStringAsFixed(6)}',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: textSecondary,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // Destination info row
-                          if (_destinationName != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: successGreen.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: successGreen.withValues(alpha: 0.3),
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.flag_rounded, size: 15, color: successGreen),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        _destinationName!,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: successGreen,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    GestureDetector(
-                                      onTap: _clearRoute,
-                                      child: Icon(Icons.close, size: 15, color: successGreen),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                          // Route info: jarak, waktu, ETA
-                          if (_routeInfo != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: primaryBlue.withValues(alpha: 0.07),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: primaryBlue.withValues(alpha: 0.25),
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.directions_car, size: 15, color: primaryBlue),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        _routeInfo!,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: primaryBlue,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                          // Navigation buttons
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              // Tombol Atur Tujuan / Hapus Rute
-                              Expanded(
-                                child: _isLoadingRoute
-                                    ? Container(
-                                  height: 44,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(10),
-                                    color: Colors.grey.shade200,
-                                  ),
-                                  child: const Center(
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(strokeWidth: 2),
-                                        ),
-                                        SizedBox(width: 8),
-                                        Text('Memuat rute...', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                                      ],
-                                    ),
-                                  ),
-                                )
-                                    : ElevatedButton.icon(
-                                  onPressed: _showRoute ? _clearRoute : _showDestinationDialog,
-                                  icon: Icon(
-                                    _showRoute ? Icons.close : Icons.add_location_alt_rounded,
-                                    size: 17,
-                                  ),
-                                  label: Text(
-                                    _showRoute ? 'Hapus Rute' : 'Atur Tujuan',
-                                    style: const TextStyle(fontSize: 13),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: _showRoute
-                                        ? Colors.grey.shade600
-                                        : primaryBlue,
-                                    foregroundColor: Colors.white,
-                                    elevation: 0,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(vertical: 10),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              // Tombol Buka Google Maps (hanya aktif jika tujuan sudah ada)
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  onPressed: _destinationLocation != null
-                                      ? _openExternalNavigation
-                                      : null,
-                                  icon: const Icon(Icons.navigation_rounded, size: 17),
-                                  label: const Text(
-                                    'Buka Maps',
-                                    style: TextStyle(fontSize: 13),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: successGreen,
-                                    foregroundColor: Colors.white,
-                                    disabledBackgroundColor: Colors.grey.shade300,
-                                    elevation: 0,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(vertical: 10),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-              const SizedBox(height: 24),
-
-              // Temperature Settings Card
-              RepaintBoundary(
-                child: Container(
-                  width: double.infinity,
-                  constraints: BoxConstraints(
-                    minHeight: 200,
-                    maxWidth: MediaQuery.of(context).size.width - 32,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [cardWhite, cardWhite.withValues(alpha:0.9)],
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha:0.08),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      ),
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha:0.04),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal:
-                      MediaQuery.of(context).size.width > 600 ? 24 : 16,
-                      vertical:
-                      MediaQuery.of(context).size.width > 600 ? 24 : 20,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Header Row
-                        Row(
-                          children: [
-                            Container(
-                              padding: EdgeInsets.all(
+                              SizedBox(
+                                width:
                                 MediaQuery.of(context).size.width > 600
                                     ? 12
-                                    : 10,
+                                    : 8,
                               ),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    warningOrange.withValues(alpha:0.1),
-                                    warningOrange.withValues(alpha:0.05),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Icon(
-                                Icons.tune_rounded,
-                                color: warningOrange,
-                                size:
-                                MediaQuery.of(context).size.width > 600
-                                    ? 24
-                                    : 20,
-                              ),
-                            ),
-                            SizedBox(
-                              width:
-                              MediaQuery.of(context).size.width > 600
-                                  ? 12
-                                  : 8,
-                            ),
-                            Expanded(
-                              child: Text(
-                                'Pengaturan Suhu Maksimal',
-                                style: TextStyle(
-                                  fontSize:
-                                  MediaQuery.of(context).size.width > 600
-                                      ? 20
-                                      : 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: textPrimary,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(
-                          height:
-                          MediaQuery.of(context).size.width > 600 ? 20 : 16,
-                        ),
-
-                        // Input Row - Responsive Layout
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final isSmallScreen = constraints.maxWidth < 400;
-
-                            if (isSmallScreen) {
-                              // Stack layout for small screens
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  // Input Field
-                                  Container(
-                                    constraints: BoxConstraints(maxHeight: 80),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: Colors.grey.shade300,
-                                        width: 1,
-                                      ),
-                                    ),
-                                    child: TextField(
-                                      controller: _maxTempController,
-                                      keyboardType: TextInputType.number,
-                                      maxLength: 5, // Limit input length
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w500,
-                                        color: textPrimary,
-                                      ),
-                                      decoration: InputDecoration(
-                                        labelText: 'Suhu Maksimal (°C)',
-                                        labelStyle: TextStyle(
-                                          color: textSecondary,
-                                          fontWeight: FontWeight.w500,
-                                          fontSize: 14,
-                                        ),
-                                        border: InputBorder.none,
-                                        contentPadding:
-                                        const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 12,
-                                        ),
-                                        counterText:
-                                        '', // Hide character counter
-                                        prefixIcon: Container(
-                                          margin: const EdgeInsets.all(8),
-                                          padding: const EdgeInsets.all(6),
-                                          decoration: BoxDecoration(
-                                            color: primaryBlue.withValues(alpha:0.1),
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                          ),
-                                          child: Icon(
-                                            Icons.device_thermostat_rounded,
-                                            color: primaryBlue,
-                                            size: 18,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
+                              Expanded(
+                                child: Text(
+                                  'Pengaturan Suhu Maksimal',
+                                  style: TextStyle(
+                                    fontSize:
+                                    MediaQuery.of(context).size.width > 600
+                                        ? 20
+                                        : 18,
+                                    fontWeight: FontWeight.w600,
+                                    color: textPrimary,
                                   ),
-                                  const SizedBox(height: 12),
-                                  // Send Button
-                                  Container(
-                                    width: double.infinity,
-                                    height: 48,
-                                    decoration: BoxDecoration(
-                                      gradient:
-                                      _isConnected
-                                          ? const LinearGradient(
-                                        colors: [
-                                          primaryBlue,
-                                          primaryDark,
-                                        ],
-                                      )
-                                          : LinearGradient(
-                                        colors: [
-                                          Colors.grey.shade400,
-                                          Colors.grey.shade500,
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(12),
-                                      boxShadow:
-                                      _isConnected
-                                          ? [
-                                        BoxShadow(
-                                          color: primaryBlue
-                                              .withValues(alpha:0.3),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, 2),
-                                        ),
-                                      ]
-                                          : null,
-                                    ),
-                                    child: ElevatedButton(
-                                      onPressed:
-                                      _isConnected
-                                          ? _sendMaxTemperature
-                                          : null,
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.transparent,
-                                        foregroundColor: Colors.white,
-                                        shadowColor: Colors.transparent,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 24,
-                                          vertical: 12,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                        ),
-                                      ),
-                                      child: const Text(
-                                        'Kirim',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            } else {
-                              // Row layout for larger screens
-                              return Row(
-                                children: [
-                                  Expanded(
-                                    flex: 3,
-                                    child: Container(
-                                      constraints: BoxConstraints(
-                                        maxHeight: 80,
-                                      ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(
+                            height:
+                            MediaQuery.of(context).size.width > 600 ? 20 : 16,
+                          ),
+
+                          // Input Row - Responsive Layout
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final isSmallScreen = constraints.maxWidth < 400;
+
+                              if (isSmallScreen) {
+                                // Stack layout for small screens
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    // Input Field
+                                    Container(
+                                      constraints: BoxConstraints(maxHeight: 80),
                                       decoration: BoxDecoration(
+                                        color: inputFill,
                                         borderRadius: BorderRadius.circular(12),
                                         border: Border.all(
-                                          color: Colors.grey.shade300,
+                                          color: inputBorder,
                                           width: 1,
                                         ),
                                       ),
@@ -2215,45 +2107,43 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                           labelStyle: TextStyle(
                                             color: textSecondary,
                                             fontWeight: FontWeight.w500,
+                                            fontSize: 14,
                                           ),
                                           border: InputBorder.none,
-                                          contentPadding: const EdgeInsets.all(
-                                            16,
+                                          contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 12,
                                           ),
                                           counterText:
                                           '', // Hide character counter
                                           prefixIcon: Container(
                                             margin: const EdgeInsets.all(8),
-                                            padding: const EdgeInsets.all(8),
+                                            padding: const EdgeInsets.all(6),
                                             decoration: BoxDecoration(
-                                              color: primaryBlue.withValues(alpha:
-                                              0.1,
+                                              color: primaryBlue.withValues(alpha:0.1),
+                                              borderRadius: BorderRadius.circular(
+                                                8,
                                               ),
-                                              borderRadius:
-                                              BorderRadius.circular(8),
                                             ),
                                             child: Icon(
                                               Icons.device_thermostat_rounded,
                                               color: primaryBlue,
-                                              size: 20,
+                                              size: 18,
                                             ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Flexible(
-                                    flex: 1,
-                                    child: Container(
-                                      constraints: BoxConstraints(
-                                        minWidth: 80,
-                                        maxWidth: 120,
-                                      ),
+                                    const SizedBox(height: 12),
+                                    // Send Button
+                                    Container(
+                                      width: double.infinity,
+                                      height: 48,
                                       decoration: BoxDecoration(
                                         gradient:
                                         _isConnected
-                                            ? const LinearGradient(
+                                            ? LinearGradient(
                                           colors: [
                                             primaryBlue,
                                             primaryDark,
@@ -2288,8 +2178,8 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                           foregroundColor: Colors.white,
                                           shadowColor: Colors.transparent,
                                           padding: const EdgeInsets.symmetric(
-                                            horizontal: 16,
-                                            vertical: 16,
+                                            horizontal: 24,
+                                            vertical: 12,
                                           ),
                                           shape: RoundedRectangleBorder(
                                             borderRadius: BorderRadius.circular(
@@ -2297,276 +2187,59 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                             ),
                                           ),
                                         ),
-                                        child: FittedBox(
-                                          fit: BoxFit.scaleDown,
-                                          child: const Text(
-                                            'Kirim',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 16,
-                                            ),
+                                        child: const Text(
+                                          'Kirim',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 16,
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              );
-                            }
-                          },
-                        ),
-
-                        SizedBox(
-                          height:
-                          MediaQuery.of(context).size.width > 600 ? 16 : 12,
-                        ),
-
-                        // Info Container
-                        Container(
-                          width: double.infinity,
-                          constraints: BoxConstraints(minHeight: 40),
-                          padding: EdgeInsets.all(
-                            MediaQuery.of(context).size.width > 600 ? 12 : 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: backgroundGrey,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.info_outline_rounded,
-                                size: 16,
-                                color: textSecondary,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Suhu maksimal saat ini: ${_maxTemperature.toStringAsFixed(1)}°C',
-                                  style: TextStyle(
-                                    fontSize:
-                                    MediaQuery.of(context).size.width > 600
-                                        ? 14
-                                        : 13,
-                                    color: textSecondary,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 2,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Time Configuration Settings Card
-              RepaintBoundary(
-                child: Container(
-                  width: double.infinity,
-                  constraints: BoxConstraints(
-                    minHeight: 200,
-                    maxWidth: MediaQuery.of(context).size.width - 32,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [cardWhite, cardWhite.withValues(alpha:0.9)],
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha:0.08),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      ),
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha:0.04),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal:
-                      MediaQuery.of(context).size.width > 600 ? 24 : 16,
-                      vertical:
-                      MediaQuery.of(context).size.width > 600 ? 24 : 20,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Header Row
-                        Row(
-                          children: [
-                            Container(
-                              padding: EdgeInsets.all(
-                                MediaQuery.of(context).size.width > 600
-                                    ? 12
-                                    : 10,
-                              ),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    accentTeal.withValues(alpha:0.1),
-                                    accentTeal.withValues(alpha:0.05),
                                   ],
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Icon(
-                                Icons.schedule_rounded,
-                                color: accentTeal,
-                                size:
-                                MediaQuery.of(context).size.width > 600
-                                    ? 24
-                                    : 20,
-                              ),
-                            ),
-                            SizedBox(
-                              width:
-                              MediaQuery.of(context).size.width > 600
-                                  ? 12
-                                  : 8,
-                            ),
-                            Expanded(
-                              child: Text(
-                                'Pengaturan Waktu Penyimpanan',
-                                style: TextStyle(
-                                  fontSize:
-                                  MediaQuery.of(context).size.width > 600
-                                      ? 20
-                                      : 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: textPrimary,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(
-                          height:
-                          MediaQuery.of(context).size.width > 600 ? 20 : 16,
-                        ),
-
-                        // Time Input Fields - Grid Layout
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final isSmallScreen = constraints.maxWidth < 400;
-
-                            return Column(
-                              children: [
-                                // First row: Days and Hours
-                                Row(
+                                );
+                              } else {
+                                // Row layout for larger screens
+                                return Row(
                                   children: [
                                     Expanded(
+                                      flex: 3,
                                       child: Container(
+                                        constraints: BoxConstraints(
+                                          maxHeight: 80,
+                                        ),
                                         decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
+                                          color: inputFill,
+                                          borderRadius: BorderRadius.circular(12),
                                           border: Border.all(
-                                            color: Colors.grey.shade300,
+                                            color: inputBorder,
                                             width: 1,
                                           ),
                                         ),
                                         child: TextField(
-                                          controller: _daysController,
+                                          controller: _maxTempController,
                                           keyboardType: TextInputType.number,
-                                          maxLength: 3,
+                                          maxLength: 5, // Limit input length
                                           style: TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.w500,
                                             color: textPrimary,
                                           ),
                                           decoration: InputDecoration(
-                                            labelText: 'Hari',
+                                            labelText: 'Suhu Maksimal (°C)',
                                             labelStyle: TextStyle(
                                               color: textSecondary,
                                               fontWeight: FontWeight.w500,
-                                              fontSize: 14,
                                             ),
                                             border: InputBorder.none,
-                                            contentPadding:
-                                            EdgeInsets.symmetric(
-                                              horizontal:
-                                              isSmallScreen ? 12 : 16,
-                                              vertical:
-                                              isSmallScreen ? 12 : 16,
+                                            contentPadding: const EdgeInsets.all(
+                                              16,
                                             ),
-                                            counterText: '',
+                                            counterText:
+                                            '', // Hide character counter
                                             prefixIcon: Container(
                                               margin: const EdgeInsets.all(8),
-                                              padding: const EdgeInsets.all(6),
-                                              decoration: BoxDecoration(
-                                                color: accentTeal.withValues(alpha:
-                                                0.1,
-                                                ),
-                                                borderRadius:
-                                                BorderRadius.circular(8),
-                                              ),
-                                              child: Icon(
-                                                Icons.calendar_today_rounded,
-                                                color: accentTeal,
-                                                size: 18,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          border: Border.all(
-                                            color: Colors.grey.shade300,
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: TextField(
-                                          controller: _hoursController,
-                                          keyboardType: TextInputType.number,
-                                          maxLength: 2,
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w500,
-                                            color: textPrimary,
-                                          ),
-                                          decoration: InputDecoration(
-                                            labelText: 'Jam (0-23)',
-                                            labelStyle: TextStyle(
-                                              color: textSecondary,
-                                              fontWeight: FontWeight.w500,
-                                              fontSize: 14,
-                                            ),
-                                            border: InputBorder.none,
-                                            contentPadding:
-                                            EdgeInsets.symmetric(
-                                              horizontal:
-                                              isSmallScreen ? 12 : 16,
-                                              vertical:
-                                              isSmallScreen ? 12 : 16,
-                                            ),
-                                            counterText: '',
-                                            prefixIcon: Container(
-                                              margin: const EdgeInsets.all(8),
-                                              padding: const EdgeInsets.all(6),
+                                              padding: const EdgeInsets.all(8),
                                               decoration: BoxDecoration(
                                                 color: primaryBlue.withValues(alpha:
                                                 0.1,
@@ -2575,9 +2248,77 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                                 BorderRadius.circular(8),
                                               ),
                                               child: Icon(
-                                                Icons.access_time_rounded,
+                                                Icons.device_thermostat_rounded,
                                                 color: primaryBlue,
-                                                size: 18,
+                                                size: 20,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Flexible(
+                                      flex: 1,
+                                      child: Container(
+                                        constraints: BoxConstraints(
+                                          minWidth: 80,
+                                          maxWidth: 120,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          gradient:
+                                          _isConnected
+                                              ? LinearGradient(
+                                            colors: [
+                                              primaryBlue,
+                                              primaryDark,
+                                            ],
+                                          )
+                                              : LinearGradient(
+                                            colors: [
+                                              Colors.grey.shade400,
+                                              Colors.grey.shade500,
+                                            ],
+                                          ),
+                                          borderRadius: BorderRadius.circular(12),
+                                          boxShadow:
+                                          _isConnected
+                                              ? [
+                                            BoxShadow(
+                                              color: primaryBlue
+                                                  .withValues(alpha:0.3),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ]
+                                              : null,
+                                        ),
+                                        child: ElevatedButton(
+                                          onPressed:
+                                          _isConnected
+                                              ? _sendMaxTemperature
+                                              : null,
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.transparent,
+                                            foregroundColor: Colors.white,
+                                            shadowColor: Colors.transparent,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                              vertical: 16,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(
+                                                12,
+                                              ),
+                                            ),
+                                          ),
+                                          child: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            child: const Text(
+                                              'Kirim',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 16,
                                               ),
                                             ),
                                           ),
@@ -2585,272 +2326,551 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                                       ),
                                     ),
                                   ],
-                                ),
-                                const SizedBox(height: 12),
-                                // Second row: Minutes and Seconds
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          border: Border.all(
-                                            color: Colors.grey.shade300,
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: TextField(
-                                          controller: _minutesController,
-                                          keyboardType: TextInputType.number,
-                                          maxLength: 2,
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w500,
-                                            color: textPrimary,
-                                          ),
-                                          decoration: InputDecoration(
-                                            labelText: 'Menit (0-59)',
-                                            labelStyle: TextStyle(
-                                              color: textSecondary,
-                                              fontWeight: FontWeight.w500,
-                                              fontSize: 14,
-                                            ),
-                                            border: InputBorder.none,
-                                            contentPadding:
-                                            EdgeInsets.symmetric(
-                                              horizontal:
-                                              isSmallScreen ? 12 : 16,
-                                              vertical:
-                                              isSmallScreen ? 12 : 16,
-                                            ),
-                                            counterText: '',
-                                            prefixIcon: Container(
-                                              margin: const EdgeInsets.all(8),
-                                              padding: const EdgeInsets.all(6),
-                                              decoration: BoxDecoration(
-                                                color: warningOrange
-                                                    .withValues(alpha:0.1),
-                                                borderRadius:
-                                                BorderRadius.circular(8),
-                                              ),
-                                              child: Icon(
-                                                Icons.timer_rounded,
-                                                color: warningOrange,
-                                                size: 18,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          border: Border.all(
-                                            color: Colors.grey.shade300,
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: TextField(
-                                          controller: _secondsController,
-                                          keyboardType: TextInputType.number,
-                                          maxLength: 2,
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w500,
-                                            color: textPrimary,
-                                          ),
-                                          decoration: InputDecoration(
-                                            labelText: 'Detik (0-59)',
-                                            labelStyle: TextStyle(
-                                              color: textSecondary,
-                                              fontWeight: FontWeight.w500,
-                                              fontSize: 14,
-                                            ),
-                                            border: InputBorder.none,
-                                            contentPadding:
-                                            EdgeInsets.symmetric(
-                                              horizontal:
-                                              isSmallScreen ? 12 : 16,
-                                              vertical:
-                                              isSmallScreen ? 12 : 16,
-                                            ),
-                                            counterText: '',
-                                            prefixIcon: Container(
-                                              margin: const EdgeInsets.all(8),
-                                              padding: const EdgeInsets.all(6),
-                                              decoration: BoxDecoration(
-                                                color: successGreen.withValues(alpha:
-                                                0.1,
-                                                ),
-                                                borderRadius:
-                                                BorderRadius.circular(8),
-                                              ),
-                                              child: Icon(
-                                                Icons.timer_10_rounded,
-                                                color: successGreen,
-                                                size: 18,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        // Submit Button
-                        Container(
-                          width: double.infinity,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            gradient:
-                            (_isConnected && !_isTimeConfigLoading)
-                                ? LinearGradient(
-                              colors: [
-                                accentTeal,
-                                accentTeal.withValues(alpha:0.8),
-                              ],
-                            )
-                                : LinearGradient(
-                              colors: [
-                                Colors.grey.shade400,
-                                Colors.grey.shade500,
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow:
-                            (_isConnected && !_isTimeConfigLoading)
-                                ? [
-                              BoxShadow(
-                                color: accentTeal.withValues(alpha:0.3),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ]
-                                : null,
+                                );
+                              }
+                            },
                           ),
-                          child: ElevatedButton(
-                            onPressed:
-                            (_isConnected && !_isTimeConfigLoading)
-                                ? _sendTimeConfiguration
-                                : null,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              foregroundColor: Colors.white,
-                              shadowColor: Colors.transparent,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 12,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+
+                          SizedBox(
+                            height:
+                            MediaQuery.of(context).size.width > 600 ? 16 : 12,
+                          ),
+
+                          // Info Container
+                          Container(
+                            width: double.infinity,
+                            constraints: BoxConstraints(minHeight: 40),
+                            padding: EdgeInsets.all(
+                              MediaQuery.of(context).size.width > 600 ? 12 : 10,
                             ),
-                            child:
-                            _isTimeConfigLoading
-                                ? Row(
-                              mainAxisAlignment:
-                              MainAxisAlignment.center,
+                            decoration: BoxDecoration(
+                              color: backgroundGrey,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor:
-                                    AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
+                                Icon(
+                                  Icons.info_outline_rounded,
+                                  size: 16,
+                                  color: textSecondary,
                                 ),
-                                const SizedBox(width: 12),
-                                const Text(
-                                  'Mengirim...',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 16,
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Suhu maksimal saat ini: ${_maxTemperature.toStringAsFixed(1)}°C',
+                                    style: TextStyle(
+                                      fontSize:
+                                      MediaQuery.of(context).size.width > 600
+                                          ? 14
+                                          : 13,
+                                      color: textSecondary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 2,
                                   ),
                                 ),
                               ],
-                            )
-                                : const Text(
-                              'Set Waktu Penyimpanan',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                              ),
                             ),
                           ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Time Configuration Settings Card
+                RepaintBoundary(
+                  child: Container(
+                    width: double.infinity,
+                    constraints: BoxConstraints(
+                      minHeight: 200,
+                      maxWidth: MediaQuery.of(context).size.width - 32,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [cardWhite, cardElevated],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha:0.08),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
                         ),
-
-                        const SizedBox(height: 12),
-
-                        // Storage Time Info Widget
-                        if (_storageTimeData != null)
-                          StorageTimeInfo(
-                            storageData: _storageTimeData,
-                            onRefresh: _loadStorageTimeData,
-                          ),
-
-                        const SizedBox(height: 12),
-
-                        // Info Container
-                        Container(
-                          width: double.infinity,
-                          constraints: BoxConstraints(minHeight: 40),
-                          padding: EdgeInsets.all(
-                            MediaQuery.of(context).size.width > 600 ? 12 : 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: backgroundGrey,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha:0.04),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal:
+                        MediaQuery.of(context).size.width > 600 ? 24 : 16,
+                        vertical:
+                        MediaQuery.of(context).size.width > 600 ? 24 : 20,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Header Row
+                          Row(
                             children: [
-                              Icon(
-                                Icons.info_outline_rounded,
-                                size: 16,
-                                color: textSecondary,
+                              Container(
+                                padding: EdgeInsets.all(
+                                  MediaQuery.of(context).size.width > 600
+                                      ? 12
+                                      : 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      accentTeal.withValues(alpha:0.1),
+                                      accentTeal.withValues(alpha:0.05),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  Icons.schedule_rounded,
+                                  color: accentTeal,
+                                  size:
+                                  MediaQuery.of(context).size.width > 600
+                                      ? 24
+                                      : 20,
+                                ),
                               ),
-                              const SizedBox(width: 8),
+                              SizedBox(
+                                width:
+                                MediaQuery.of(context).size.width > 600
+                                    ? 12
+                                    : 8,
+                              ),
                               Expanded(
                                 child: Text(
-                                  'Waktu penyimpanan saat ini: ${_storageDays}d ${_storageHours}h ${_storageMinutes}m ${_storageSeconds}s',
+                                  'Pengaturan Waktu Penyimpanan',
                                   style: TextStyle(
                                     fontSize:
                                     MediaQuery.of(context).size.width > 600
-                                        ? 14
-                                        : 13,
-                                    color: textSecondary,
-                                    fontWeight: FontWeight.w500,
+                                        ? 20
+                                        : 18,
+                                    fontWeight: FontWeight.w600,
+                                    color: textPrimary,
                                   ),
                                   overflow: TextOverflow.ellipsis,
-                                  maxLines: 2,
+                                  maxLines: 1,
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                      ],
+                          SizedBox(
+                            height:
+                            MediaQuery.of(context).size.width > 600 ? 20 : 16,
+                          ),
+
+                          // Time Input Fields - Grid Layout
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final isSmallScreen = constraints.maxWidth < 400;
+
+                              return Column(
+                                children: [
+                                  // First row: Days and Hours
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: inputFill,
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            border: Border.all(
+                                              color: inputBorder,
+                                              width: 1,
+                                            ),
+                                          ),
+                                          child: TextField(
+                                            controller: _daysController,
+                                            keyboardType: TextInputType.number,
+                                            maxLength: 3,
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w500,
+                                              color: textPrimary,
+                                            ),
+                                            decoration: InputDecoration(
+                                              labelText: 'Hari',
+                                              labelStyle: TextStyle(
+                                                color: textSecondary,
+                                                fontWeight: FontWeight.w500,
+                                                fontSize: 14,
+                                              ),
+                                              border: InputBorder.none,
+                                              contentPadding:
+                                              EdgeInsets.symmetric(
+                                                horizontal:
+                                                isSmallScreen ? 12 : 16,
+                                                vertical:
+                                                isSmallScreen ? 12 : 16,
+                                              ),
+                                              counterText: '',
+                                              prefixIcon: Container(
+                                                margin: const EdgeInsets.all(8),
+                                                padding: const EdgeInsets.all(6),
+                                                decoration: BoxDecoration(
+                                                  color: accentTeal.withValues(alpha:
+                                                  0.1,
+                                                  ),
+                                                  borderRadius:
+                                                  BorderRadius.circular(8),
+                                                ),
+                                                child: Icon(
+                                                  Icons.calendar_today_rounded,
+                                                  color: accentTeal,
+                                                  size: 18,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: inputFill,
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            border: Border.all(
+                                              color: inputBorder,
+                                              width: 1,
+                                            ),
+                                          ),
+                                          child: TextField(
+                                            controller: _hoursController,
+                                            keyboardType: TextInputType.number,
+                                            maxLength: 2,
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w500,
+                                              color: textPrimary,
+                                            ),
+                                            decoration: InputDecoration(
+                                              labelText: 'Jam (0-23)',
+                                              labelStyle: TextStyle(
+                                                color: textSecondary,
+                                                fontWeight: FontWeight.w500,
+                                                fontSize: 14,
+                                              ),
+                                              border: InputBorder.none,
+                                              contentPadding:
+                                              EdgeInsets.symmetric(
+                                                horizontal:
+                                                isSmallScreen ? 12 : 16,
+                                                vertical:
+                                                isSmallScreen ? 12 : 16,
+                                              ),
+                                              counterText: '',
+                                              prefixIcon: Container(
+                                                margin: const EdgeInsets.all(8),
+                                                padding: const EdgeInsets.all(6),
+                                                decoration: BoxDecoration(
+                                                  color: primaryBlue.withValues(alpha:
+                                                  0.1,
+                                                  ),
+                                                  borderRadius:
+                                                  BorderRadius.circular(8),
+                                                ),
+                                                child: Icon(
+                                                  Icons.access_time_rounded,
+                                                  color: primaryBlue,
+                                                  size: 18,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  // Second row: Minutes and Seconds
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: inputFill,
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            border: Border.all(
+                                              color: inputBorder,
+                                              width: 1,
+                                            ),
+                                          ),
+                                          child: TextField(
+                                            controller: _minutesController,
+                                            keyboardType: TextInputType.number,
+                                            maxLength: 2,
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w500,
+                                              color: textPrimary,
+                                            ),
+                                            decoration: InputDecoration(
+                                              labelText: 'Menit (0-59)',
+                                              labelStyle: TextStyle(
+                                                color: textSecondary,
+                                                fontWeight: FontWeight.w500,
+                                                fontSize: 14,
+                                              ),
+                                              border: InputBorder.none,
+                                              contentPadding:
+                                              EdgeInsets.symmetric(
+                                                horizontal:
+                                                isSmallScreen ? 12 : 16,
+                                                vertical:
+                                                isSmallScreen ? 12 : 16,
+                                              ),
+                                              counterText: '',
+                                              prefixIcon: Container(
+                                                margin: const EdgeInsets.all(8),
+                                                padding: const EdgeInsets.all(6),
+                                                decoration: BoxDecoration(
+                                                  color: warningOrange
+                                                      .withValues(alpha:0.1),
+                                                  borderRadius:
+                                                  BorderRadius.circular(8),
+                                                ),
+                                                child: Icon(
+                                                  Icons.timer_rounded,
+                                                  color: warningOrange,
+                                                  size: 18,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: inputFill,
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            border: Border.all(
+                                              color: inputBorder,
+                                              width: 1,
+                                            ),
+                                          ),
+                                          child: TextField(
+                                            controller: _secondsController,
+                                            keyboardType: TextInputType.number,
+                                            maxLength: 2,
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w500,
+                                              color: textPrimary,
+                                            ),
+                                            decoration: InputDecoration(
+                                              labelText: 'Detik (0-59)',
+                                              labelStyle: TextStyle(
+                                                color: textSecondary,
+                                                fontWeight: FontWeight.w500,
+                                                fontSize: 14,
+                                              ),
+                                              border: InputBorder.none,
+                                              contentPadding:
+                                              EdgeInsets.symmetric(
+                                                horizontal:
+                                                isSmallScreen ? 12 : 16,
+                                                vertical:
+                                                isSmallScreen ? 12 : 16,
+                                              ),
+                                              counterText: '',
+                                              prefixIcon: Container(
+                                                margin: const EdgeInsets.all(8),
+                                                padding: const EdgeInsets.all(6),
+                                                decoration: BoxDecoration(
+                                                  color: successGreen.withValues(alpha:
+                                                  0.1,
+                                                  ),
+                                                  borderRadius:
+                                                  BorderRadius.circular(8),
+                                                ),
+                                                child: Icon(
+                                                  Icons.timer_10_rounded,
+                                                  color: successGreen,
+                                                  size: 18,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Submit Button
+                          Container(
+                            width: double.infinity,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              gradient:
+                              (_isConnected && !_isTimeConfigLoading)
+                                  ? LinearGradient(
+                                colors: [
+                                  accentTeal,
+                                  accentTeal.withValues(alpha:0.8),
+                                ],
+                              )
+                                  : LinearGradient(
+                                colors: [
+                                  Colors.grey.shade400,
+                                  Colors.grey.shade500,
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow:
+                              (_isConnected && !_isTimeConfigLoading)
+                                  ? [
+                                BoxShadow(
+                                  color: accentTeal.withValues(alpha:0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                                  : null,
+                            ),
+                            child: ElevatedButton(
+                              onPressed:
+                              (_isConnected && !_isTimeConfigLoading)
+                                  ? _sendTimeConfiguration
+                                  : null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.transparent,
+                                foregroundColor: Colors.white,
+                                shadowColor: Colors.transparent,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child:
+                              _isTimeConfigLoading
+                                  ? Row(
+                                mainAxisAlignment:
+                                MainAxisAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor:
+                                      AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  const Text(
+                                    'Mengirim...',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ],
+                              )
+                                  : const Text(
+                                'Set Waktu Penyimpanan',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // Storage Time Info Widget
+                          if (_storageTimeData != null)
+                            StorageTimeInfo(
+                              storageData: _storageTimeData,
+                              onRefresh: _loadStorageTimeData,
+                            ),
+
+                          const SizedBox(height: 12),
+
+                          // Info Container
+                          Container(
+                            width: double.infinity,
+                            constraints: BoxConstraints(minHeight: 40),
+                            padding: EdgeInsets.all(
+                              MediaQuery.of(context).size.width > 600 ? 12 : 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: backgroundGrey,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.info_outline_rounded,
+                                  size: 16,
+                                  color: textSecondary,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Waktu penyimpanan saat ini: ${_storageDays}d ${_storageHours}h ${_storageMinutes}m ${_storageSeconds}s',
+                                    style: TextStyle(
+                                      fontSize:
+                                      MediaQuery.of(context).size.width > 600
+                                          ? 14
+                                          : 13,
+                                      color: textSecondary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -3067,7 +3087,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                         Expanded(
                           child: Text(
                             title,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontFamily: 'Roboto',
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
@@ -3084,7 +3104,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                     // Main message
                     Text(
                       message,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Roboto',
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -3100,7 +3120,7 @@ class _MonitoringScreenState extends State<MonitoringScreen>
                     // Sub message
                     Text(
                       subMessage,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Roboto',
                         fontSize: 11,
                         color: textSecondary,
